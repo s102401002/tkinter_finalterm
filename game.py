@@ -1,10 +1,10 @@
 import tkinter as tk
 from pathlib import Path
 from PIL import Image, ImageTk
-
+import random 
 from animation import Animation
 from player import Player
-
+from npc import NPC
 # ------------------- config -------------------
 WIDTH, HEIGHT = 900, 400
 FPS = 60
@@ -44,6 +44,28 @@ class ElectricEyeGame(tk.Tk):
         self.switch_dx_scr  = 0
         self.switch_world_x = 0
 
+        # 隨機位置 (畫面左 or 右隨機一邊)
+        start_x = random.choice([50, WIDTH - 50])
+        y = HEIGHT - 120
+
+        # assets 資料夾路徑
+        npc_asset_dir = ASSETS_DIR / 'npc' / 'man'
+
+        # 建立 NPC 物件
+        self.npc_list = []
+        npc_y = [HEIGHT-140, HEIGHT-150,  HEIGHT-190,  HEIGHT-210]
+        for _ in range(3):  # 例如一次隨機生成 3 個
+            npc = NPC(self.canvas, npc_asset_dir, start_x, HEIGHT-210, fps=FPS)
+            self.npc_list.append(npc)
+        # for _ in range(3):  # 例如一次隨機生成 3 個
+        #     npc = NPC(self.canvas, npc_asset_dir, start_x, HEIGHT-150, fps=FPS)
+        #     self.npc_list.append(npc)
+        # for _ in range(3):  # 例如一次隨機生成 3 個
+        #     npc = NPC(self.canvas, npc_asset_dir, start_x, y+10, fps=FPS)
+        #     self.npc_list.append(npc)
+        # for _ in range(3):  # 例如一次隨機生成 3 個
+        #     npc = NPC(self.canvas, npc_asset_dir, start_x, y+20, fps=FPS)
+        #     self.npc_list.append(npc)
         # ---- 事件與資源 ----
         self._bind_events()
         self._load_assets()
@@ -97,7 +119,9 @@ class ElectricEyeGame(tk.Tk):
         self.bg_offset = (self.bg_img.width() - WIDTH) // 2
         self.canvas.create_image(-self.bg_offset, 0, image=self.bg_img,
                                  anchor='nw', tags='bg')
-
+        
+        self.canvas.tag_lower('bg')  # 背景放到最底
+        
         # 玩家
         self.player = Player(self.canvas,
                              PLAYER_CENTER_X,
@@ -176,6 +200,9 @@ class ElectricEyeGame(tk.Tk):
                 # 背景真的捲動
                 self.bg_offset = no
                 self.canvas.move('all', -d, 0)
+                # npc也跟著背景一起動
+                for npc in self.npc_list:
+                    self.canvas.move(npc.id, -d, 0)
                 # 玩家在畫面固定點
                 self.player.x = PLAYER_RIGHT_X if self.player.face_right else PLAYER_LEFT_X
             else:
@@ -209,6 +236,14 @@ class ElectricEyeGame(tk.Tk):
 
         # ---------- 6. 更新影像 ----------
         self.player.update()
+
+
+        # ---------- 7. 更新影像 ----------
+        for npc in self.npc_list:
+            npc.update()
+            # 如果要移動：
+            dx = 2 if npc.face_right else -2
+            npc.move(dx)
 
     # --------------------------------------------------------
     # 主迴圈
