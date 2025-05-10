@@ -53,24 +53,26 @@ class ElectricEyeGame(tk.Tk):
 
         # 建立 NPC 物件
         self.npc_list = []
-        npc_y = [HEIGHT-140, HEIGHT-150,  HEIGHT-190,  HEIGHT-210]
-        for _ in range(3):  # 例如一次隨機生成 3 個
-            npc = NPC(self.canvas, npc_asset_dir, start_x, HEIGHT-210, fps=FPS)
-            self.npc_list.append(npc)
-        # for _ in range(3):  # 例如一次隨機生成 3 個
-        #     npc = NPC(self.canvas, npc_asset_dir, start_x, HEIGHT-150, fps=FPS)
-        #     self.npc_list.append(npc)
-        # for _ in range(3):  # 例如一次隨機生成 3 個
-        #     npc = NPC(self.canvas, npc_asset_dir, start_x, y+10, fps=FPS)
-        #     self.npc_list.append(npc)
-        # for _ in range(3):  # 例如一次隨機生成 3 個
-        #     npc = NPC(self.canvas, npc_asset_dir, start_x, y+20, fps=FPS)
-        #     self.npc_list.append(npc)
+        npc_y = [HEIGHT-130, HEIGHT-150,  HEIGHT-190,  HEIGHT-210] # 後面兩項靠近牆壁
         # ---- 事件與資源 ----
         self._bind_events()
         self._load_assets()
         self._setup_world()
-
+        for _ in range(7):  # 例如一次隨機生成 7 個
+            idx = random.randrange(len(npc_y))
+            y = npc_y[idx]
+            npc = NPC(
+                self.canvas,
+                npc_asset_dir,
+                start_x=random.randint(300, self.bg_img.width() - 300),
+                y=y,
+                fps=FPS,
+                world_left=300,
+                world_right=self.bg_img.width() - 300
+            )
+            if idx == 2 or idx == 3:
+                self.canvas.tag_raise(npc.id, 'bg') #在player之下，背景之上
+            self.npc_list.append(npc)
         # ---- 主迴圈 ----
         self._loop()
 
@@ -161,6 +163,11 @@ class ElectricEyeGame(tk.Tk):
         if self.player.hover:
             self.player.idle = True
             self.player.update()
+
+            # 在 return 前面補上 NPC 更新 不然NPC會跟著玩家一起停下來
+            for npc in self.npc_list:
+                npc.update(self.bg_offset)
+                npc.move(WALK_SPEED)
             return
 
         # ---------- 2. 速度 / 動畫 切換 ----------
@@ -240,10 +247,8 @@ class ElectricEyeGame(tk.Tk):
 
         # ---------- 7. 更新影像 ----------
         for npc in self.npc_list:
-            npc.update()
-            # 如果要移動：
-            dx = 2 if npc.face_right else -2
-            npc.move(dx)
+            npc.update(self.bg_offset)
+            npc.move(WALK_SPEED)
 
     # --------------------------------------------------------
     # 主迴圈
