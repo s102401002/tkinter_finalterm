@@ -54,7 +54,7 @@ class ElectricEyeGame(tk.Tk):
 
         # 建立 NPC 物件
         self.npc_list = []
-        npc_y = [HEIGHT-130, HEIGHT-150,  HEIGHT-190,  HEIGHT-210] # 後面兩項靠近牆壁
+        npc_y = [HEIGHT-140, HEIGHT-170,  HEIGHT-220,  HEIGHT-240] # 後面兩項靠近牆壁
         # ---- 事件與資源 ----
         self._bind_events()
         self._load_assets()
@@ -75,6 +75,8 @@ class ElectricEyeGame(tk.Tk):
             if idx == 2 or idx == 3:
                 self.canvas.tag_raise(npc.id, 'bg') #在player之下，背景之上
             self.npc_list.append(npc)
+        
+        self.hover_npc = None # 判斷紀錄按下滑鼠時在不在npc上
         # ---- 主迴圈 ----
         self._loop()
 
@@ -83,10 +85,36 @@ class ElectricEyeGame(tk.Tk):
     # --------------------------------------------------------
     def _bind_events(self):
         self.canvas.bind("<Motion>", self._on_mouse_move)
+        # self.canvas.bind("<Button-1>", self._on_click)
+        self.canvas.bind("<ButtonPress-1>", self._on_press)
+        self.canvas.bind("<ButtonRelease-1>", self._on_release)
 
     def _on_mouse_move(self, e):
         self.mouse_x, self.mouse_y = e.x, e.y
+        # ---- 判斷滑鼠是不是在npc上: 在這裡判斷好，再交給on_press和on_release處理----
+        self.hover_npc = None
+        for npc in self.npc_list:
+            x1, y1 = self.canvas.coords(npc.id)
+            img_w = npc.current_img.width()
+            img_h = npc.current_img.height()
+            if abs(e.x - x1) <= img_w // 2 and abs(e.y - y1) <= img_h // 2:
+                self.hover_npc = npc
+                return
+    def _on_click(self, event):
+        pass
+    def _on_press(self, event):
+        if self.hover_npc:
+            self.clicked_npc = self.hover_npc
+            self.player.attracting = True
+            self.clicked_npc.walking = False
+            self.clicked_npc.start_dialog(self)
 
+    def _on_release(self, event):
+        if self.clicked_npc:
+            self.clicked_npc.stop_dialog()
+            self.clicked_npc.walking = True
+            self.clicked_npc = None
+            self.player.attracting = False
     # --------------------------------------------------------
     # 載入背景與角色貼圖
     # --------------------------------------------------------
@@ -161,15 +189,16 @@ class ElectricEyeGame(tk.Tk):
         self.player.hover = (abs(self.mouse_x - self.player.x) <= pw/2 and
                              abs(self.mouse_y - self.player.y) <= ph/2)
 
-        # 如果懸停 → 只更新靜止圖然後 return
-        if self.player.hover:
+        # 如果player懸停或吸引中 → 只更新靜止圖然後 return
+        if self.player.hover or self.player.attracting:
             self.player.idle = True
             self.player.update()
-
+            
             # 在 return 前面補上 NPC 更新 不然NPC會跟著玩家一起停下來
             for npc in self.npc_list:
                 npc.update(self.bg_offset)
-                npc.move(NPC_WALK_SPEED)
+                if not npc.is_attracted:  # 正在被勾引的 NPC 不移動
+                    npc.move(NPC_WALK_SPEED)
             return
 
         # ---------- 2. 速度 / 動畫 切換 ----------
@@ -251,7 +280,8 @@ class ElectricEyeGame(tk.Tk):
         # ---------- 7. 更新影像 ----------
         for npc in self.npc_list:
             npc.update(self.bg_offset)
-            npc.move(NPC_WALK_SPEED)
+            if not npc.is_attracted:  # 正在對話的 NPC 不移動
+                npc.move(NPC_WALK_SPEED)
 
     # --------------------------------------------------------
     # 主迴圈

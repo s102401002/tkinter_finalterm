@@ -7,6 +7,7 @@ class Player:
         self.face_right = True
         self.running = False
         self.hover = False
+        self.attracting = False # 是否點著npc 後面可以連接不同的圖片
         self.idle = False
         self.x, self.y = x, y
         self.vx = 0
@@ -29,7 +30,7 @@ class Player:
 
     def update(self):
         self.canvas.coords(self.id, self.x, self.y)
-        if self.hover or self.idle:
+        if self.hover or self.idle or self.attracting:
             img = self.anim.frames[0]
         else:
             img = self.anim.next()

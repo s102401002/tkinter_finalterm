@@ -27,6 +27,10 @@ class NPC:
 
         self.walking = True
 
+        self.is_attracted = False
+        self.timer_seconds = 0
+        self.timer_label = None  # 由主程式呼叫時設定
+
     def _load_animation(self, dir_path: Path, walk_fps: int, fps: int):
         frames = []
         for i in range(0, 13):  # 0.png ~ 13.png
@@ -73,3 +77,24 @@ class NPC:
             self.anim._loop_counter = 0
         self.canvas.itemconfig(self.id, image=self.current_img)
         # print(f"world_x={self.world_x}, bg_offset={bg_offset}, screen_x={self.world_x - bg_offset}, face_right={self.face_right}")
+    
+    def start_dialog(self, root_window):
+        if not self.is_attracted:
+            self.is_attracted = True
+            self.timer_seconds = 0
+            if not self.timer_label:
+                self.timer_label = tk.Label(root_window, text="", font=("Arial", 14), fg="white", bg="black")
+                self.timer_label.place(x=10, y=10)
+            self._update_timer(root_window)
+
+    def stop_dialog(self):
+        self.is_attracted = False
+        if self.timer_label:
+            self.timer_label.destroy()
+            self.timer_label = None
+
+    def _update_timer(self, root_window):
+        if self.is_attracted:
+            self.timer_label.config(text=f"對話中：{self.timer_seconds} 秒")
+            self.timer_seconds += 1
+            root_window.after(1000, lambda: self._update_timer(root_window))
