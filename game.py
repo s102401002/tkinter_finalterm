@@ -9,7 +9,7 @@ from npc import NPC
 WIDTH, HEIGHT = 900, 400
 FPS = 60
 ASSETS_DIR = Path(__file__).with_suffix('').with_name("assets_aligned")
-PLAYER_Y_ADJUST = -20
+PLAYER_Y_ADJUST = -50
 PLAYER_LEFT_X = WIDTH * 3 // 4
 PLAYER_RIGHT_X = WIDTH // 4
 PLAYER_CENTER_X = WIDTH // 2
@@ -17,9 +17,10 @@ BG_SPEED_MULT_RUN = 1.5
 SWITCH_STEPS = 15
 WALK_FPS = 2
 RUN_FPS = 2
-WALK_SPEED = 4
-RUN_SPEED = 6
-
+NPC_WALK_FPS = 1
+WALK_SPEED = 3
+RUN_SPEED = 10
+NPC_WALK_SPEED = 1
 # ------------------- main game -------------------
 class ElectricEyeGame(tk.Tk):
     def __init__(self):
@@ -66,7 +67,8 @@ class ElectricEyeGame(tk.Tk):
                 npc_asset_dir,
                 start_x=random.randint(300, self.bg_img.width() - 300),
                 y=y,
-                fps=FPS,
+                walk_fps=NPC_WALK_FPS,
+                fps = FPS,
                 world_left=300,
                 world_right=self.bg_img.width() - 300
             )
@@ -127,7 +129,7 @@ class ElectricEyeGame(tk.Tk):
         # 玩家
         self.player = Player(self.canvas,
                              PLAYER_CENTER_X,
-                             HEIGHT - 120 + PLAYER_Y_ADJUST,
+                             HEIGHT - 170 ,
                              self.anim_right_walk, self.anim_left_walk,
                              self.anim_right_run,  self.anim_left_run)
 
@@ -147,7 +149,7 @@ class ElectricEyeGame(tk.Tk):
         dx = self.mouse_x - self.player.x
         if abs(dx) < 10:
             return 0
-        return RUN_SPEED if abs(dx) > WIDTH * 0.5 else WALK_SPEED
+        return RUN_SPEED if abs(dx) > WIDTH * 0.3 else WALK_SPEED
 
     # --------------------------------------------------------
     # 每幀更新
@@ -167,12 +169,13 @@ class ElectricEyeGame(tk.Tk):
             # 在 return 前面補上 NPC 更新 不然NPC會跟著玩家一起停下來
             for npc in self.npc_list:
                 npc.update(self.bg_offset)
-                npc.move(WALK_SPEED)
+                npc.move(NPC_WALK_SPEED)
             return
 
         # ---------- 2. 速度 / 動畫 切換 ----------
         speed = self._determine_speed()
-        self.player.set_speed(speed)
+        self.running = (speed == RUN_SPEED)
+        self.player.set_speed(speed,self.running)
 
         # ---------- 3. 方向切換中 ----------
         if self.switching:
@@ -248,7 +251,7 @@ class ElectricEyeGame(tk.Tk):
         # ---------- 7. 更新影像 ----------
         for npc in self.npc_list:
             npc.update(self.bg_offset)
-            npc.move(WALK_SPEED)
+            npc.move(NPC_WALK_SPEED)
 
     # --------------------------------------------------------
     # 主迴圈

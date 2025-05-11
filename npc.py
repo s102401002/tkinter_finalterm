@@ -5,7 +5,7 @@ import tkinter as tk
 from pathlib import Path
 
 class NPC:
-    def __init__(self, canvas: tk.Canvas, asset_dir: Path, start_x: int, y: int, fps: int, world_left: int, world_right: int):
+    def __init__(self, canvas: tk.Canvas, asset_dir: Path, start_x: int, y: int, walk_fps: int,fps: int, world_left: int, world_right: int):
         self.canvas = canvas
         self.world_x = start_x  # 世界座標
         self.y = y
@@ -15,8 +15,8 @@ class NPC:
         self.world_right = world_right
 
         # 載入圖片
-        self.anim_walk_r = self._load_animation(asset_dir / 'right', fps)
-        self.anim_walk_l = self._load_animation(asset_dir / 'left', fps)
+        self.anim_walk_r = self._load_animation(asset_dir / 'right', walk_fps, fps)
+        self.anim_walk_l = self._load_animation(asset_dir / 'left', walk_fps, fps)
 
         self.anim = self.anim_walk_r if self.face_right else self.anim_walk_l
         self.current_img = self.anim.frames[0]
@@ -27,13 +27,13 @@ class NPC:
 
         self.walking = True
 
-    def _load_animation(self, dir_path: Path, fps: int):
+    def _load_animation(self, dir_path: Path, walk_fps: int, fps: int):
         frames = []
-        for i in range(0, 14):  # 0.png ~ 13.png
+        for i in range(0, 13):  # 0.png ~ 13.png
             img = Image.open(dir_path / f'{i}.png')
             img = img.resize((img.width//3, img.height//3), Image.Resampling.LANCZOS)
             frames.append(ImageTk.PhotoImage(img))
-        return Animation(frames, fps, fps)
+        return Animation(frames, walk_fps, fps)
 
     def move(self, speed: int):
         dx = speed if self.face_right else -speed
