@@ -19,9 +19,9 @@ class Player:
             return True
         return False
 
-    def set_speed(self, speed):
+    def set_speed(self, speed, running):
         self.vx = speed if self.face_right else -speed
-        self.running = (abs(speed) == 6)
+        self.running = running
         if self.face_right:
             self.anim = self.run_r if self.running else self.walk_r
         else:
