@@ -1,23 +1,24 @@
 import tkinter as tk
 import math
 
-class HeartFillAnimation:
+class HeartFillClip:
     def __init__(self, canvas, cx, cy, scale):
         self.canvas = canvas
         self.cx = cx
         self.cy = cy
         self.scale = scale
         self.steps = 200
-        self.fill_height = 0
-        self.max_fill = 300  # 動畫最大高度
-        self.delay = 30  # 毫秒
-        self.heart_id = None
-        self.mask_id = None
+        self.fill_ratio = 0.0  # 從 0.0 到 1.0
+        self.delay = 30
+        self.increment = 0.02
 
-        self.draw_heart_outline()
+        self.outline_points = self.compute_heart_points()
+        self.canvas.create_polygon(self.outline_points, outline="black", fill="", width=2)
+
+        self.fill_id = None
         self.animate_fill()
 
-    def heart_points(self):
+    def compute_heart_points(self):
         points = []
         for i in range(self.steps):
             t = (i / self.steps) * 2 * math.pi
@@ -28,34 +29,35 @@ class HeartFillAnimation:
             points.append((self.cx + x, self.cy + y))
         return points
 
-    def draw_heart_outline(self):
-        points = self.heart_points()
-        self.heart_id = self.canvas.create_polygon(
-            points,
-            fill="red",
-            outline="black"
-        )
-
     def animate_fill(self):
-        if self.mask_id:
-            self.canvas.delete(self.mask_id)
+        if self.fill_id:
+            self.canvas.delete(self.fill_id)
 
-        # 建立一個遮罩矩形，從上往下遮住心形
-        self.mask_id = self.canvas.create_rectangle(
-            0, 0, 500, self.cy + self.scale * 17 - self.fill_height,
-            fill="white",
-            outline="white"
-        )
+        # 重新生成遮罩心形：只顯示低於某一高度的點
+        y_values = [y for (_, y) in self.outline_points]
+        min_y = min(y_values)
+        max_y = max(y_values)
+        threshold_y = max_y - (max_y - min_y) * self.fill_ratio
+        clipped_points = [
+            (x, y) for (x, y) in self.outline_points if y > threshold_y
+        ]
 
-        self.fill_height += 5  # 每次增加高度
-        if self.fill_height <= self.max_fill:
+        if len(clipped_points) >= 3:
+            self.fill_id = self.canvas.create_polygon(
+                clipped_points,
+                fill="red",
+                outline=""
+            )
+
+        # 更新比例
+        self.fill_ratio += self.increment
+        if self.fill_ratio <= 1.05: # 用1.0會缺一塊 可能是浮點數精度問題?
             self.canvas.after(self.delay, self.animate_fill)
+if __name__ == '__main__':
+    root = tk.Tk()
+    canvas = tk.Canvas(root, width=500, height=500, bg="white")
+    canvas.pack()
 
-root = tk.Tk()
-root.title("愛心從下填滿動畫")
-canvas = tk.Canvas(root, width=500, height=500, bg="white")
-canvas.pack()
+    HeartFillClip(canvas, cx=250, cy=280, scale=5)
 
-HeartFillAnimation(canvas, cx=250, cy=280, scale=5)
-
-root.mainloop()
+    root.mainloop()
