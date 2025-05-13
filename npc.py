@@ -31,6 +31,9 @@ class NPC:
         self.timer_seconds = 0
         self.timer_label = None  # 由主程式呼叫時設定
 
+        self.heart_outline_id = None
+        self.heart_fill_id = None
+
     def _load_animation(self, dir_path: Path, walk_fps: int, fps: int):
         frames = []
         for i in range(0, 13):  # 0.png ~ 13.png
@@ -89,12 +92,71 @@ class NPC:
 
     def stop_dialog(self):
         self.is_attracted = False
-        if self.timer_label:
-            self.timer_label.destroy()
-            self.timer_label = None
+        # if self.timer_label:
+        #     self.timer_label.destroy()
+        #     self.timer_label = None
+        if self.heart_outline_id:
+            self.canvas.delete(self.heart_outline_id)
+            self.heart_outline_id = None
+        if self.heart_fill_id:
+            self.canvas.delete(self.heart_fill_id)
+            self.heart_fill_id = None
 
     def _update_timer(self, root_window):
         if self.is_attracted:
-            self.timer_label.config(text=f"對話中：{self.timer_seconds} 秒")
-            self.timer_seconds += 1
-            root_window.after(1000, lambda: self._update_timer(root_window))
+            # self.timer_label.config(text=f"對話中：{self.timer_seconds:.1f} 秒")
+            # self.timer_seconds += 0.1
+            # root_window.after(100, lambda: self._update_timer(root_window))
+            # 更新 timer
+            self.timer_seconds += 0.1
+
+            # 畫在 NPC 頭頂（根據 self.world_x 與 self.y 調整位置）
+            screen_x = self.world_x  # 你也可以考慮 bg_offset
+            screen_y = self.y - 60   # NPC 頭頂上方偏移
+            self._draw_heart_progress(screen_x, screen_y)
+
+            root_window.after(100, lambda: self._update_timer(root_window))
+    
+    def _draw_heart_progress(self, cx, cy, size=20):
+        # 計算進度（最多 10 秒）
+        progress = min(self.timer_seconds / 10, 1.0)
+        print(progress)
+        # 建立愛心輪廓座標（類似兩圓+三角）
+        def heart_points(scale):
+            return [
+                cx, cy + scale * 0.4,                     # 下尖端
+                cx - scale * 0.6, cy - scale * 0.2,       # 左下凹陷處
+                cx - scale * 0.4, cy - scale * 0.8,       # 左上圓弧外側
+                cx, cy - scale * 0.5,                     # 上中央凹陷
+                cx + scale * 0.4, cy - scale * 0.8,       # 右上圓弧外側
+                cx + scale * 0.6, cy - scale * 0.2,       # 右下凹陷處
+            ]
+        
+        # 畫愛心填滿層
+        points = heart_points(size)
+        if self.heart_fill_id:
+            self.canvas.delete(self.heart_fill_id)
+        self.heart_fill_id = self.canvas.create_polygon(
+            points,
+            fill="red",
+            stipple="gray50",  # 模擬半透明
+            tags="npc"
+        )
+        self.canvas.itemconfig(self.heart_fill_id, state="normal")
+        self.canvas.coords(self.heart_fill_id, points)
+
+        # 遮住進度外的部分 (畫遮罩)
+        clip_height = int((1 - progress) * size * 1.2)
+        clip_y = cy - size * 0.8 + clip_height
+        self.canvas.create_rectangle(cx - size, cy - size, cx + size, clip_y,
+                                    fill=self.canvas["background"], width=0, tags="npc")
+
+        # 畫愛心輪廓線
+        if self.heart_outline_id:
+            self.canvas.delete(self.heart_outline_id)
+        self.heart_outline_id = self.canvas.create_polygon(
+            points,
+            outline="red", fill="",
+            width=2,
+            tags="npc"
+        )

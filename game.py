@@ -21,6 +21,7 @@ NPC_WALK_FPS = 1
 WALK_SPEED = 3
 RUN_SPEED = 10
 NPC_WALK_SPEED = 1
+ATTRACT_TIME = 5 # 吸引幾秒加分
 # ------------------- main game -------------------
 class ElectricEyeGame(tk.Tk):
     def __init__(self):
@@ -49,32 +50,12 @@ class ElectricEyeGame(tk.Tk):
         start_x = random.choice([50, WIDTH - 50])
         y = HEIGHT - 120
 
-        # assets 資料夾路徑
-        npc_asset_dir = ASSETS_DIR / 'npc' / 'man'
-
-        # 建立 NPC 物件
-        self.npc_list = []
-        npc_y = [HEIGHT-140, HEIGHT-170,  HEIGHT-220,  HEIGHT-240] # 後面兩項靠近牆壁
+        
         # ---- 事件與資源 ----
         self._bind_events()
         self._load_assets()
         self._setup_world()
-        for _ in range(7):  # 例如一次隨機生成 7 個
-            idx = random.randrange(len(npc_y))
-            y = npc_y[idx]
-            npc = NPC(
-                self.canvas,
-                npc_asset_dir,
-                start_x=random.randint(300, self.bg_img.width() - 300),
-                y=y,
-                walk_fps=NPC_WALK_FPS,
-                fps = FPS,
-                world_left=300,
-                world_right=self.bg_img.width() - 300
-            )
-            if idx == 2 or idx == 3:
-                self.canvas.tag_raise(npc.id, 'bg') #在player之下，背景之上
-            self.npc_list.append(npc)
+        
         
         self.hover_npc = None # 判斷紀錄按下滑鼠時在不在npc上
         # ---- 主迴圈 ----
@@ -160,6 +141,30 @@ class ElectricEyeGame(tk.Tk):
                              HEIGHT - 170 ,
                              self.anim_right_walk, self.anim_left_walk,
                              self.anim_right_run,  self.anim_left_run)
+        
+        # assets 資料夾路徑
+        npc_asset_dir = ASSETS_DIR / 'npc' / 'man'
+
+        # 建立 NPC 物件
+        self.npc_list = []
+        npc_y = [HEIGHT-140, HEIGHT-170,  HEIGHT-220,  HEIGHT-240] # 後面兩項靠近牆壁
+
+        for _ in range(7):  # 例如一次隨機生成 7 個
+            idx = random.randrange(len(npc_y))
+            y = npc_y[idx]
+            npc = NPC(
+                self.canvas,
+                npc_asset_dir,
+                start_x=random.randint(300, self.bg_img.width() - 300),
+                y=y,
+                walk_fps=NPC_WALK_FPS,
+                fps = FPS,
+                world_left=300,
+                world_right=self.bg_img.width() - 300
+            )
+            if idx == 2 or idx == 3:
+                self.canvas.tag_raise(npc.id, 'bg') #在player之下，背景之上
+            self.npc_list.append(npc)
 
     # --------------------------------------------------------
     # 依滑鼠距離決定速度
