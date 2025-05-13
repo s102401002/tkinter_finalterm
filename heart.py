@@ -1,5 +1,6 @@
 import tkinter as tk
 import math
+import time
 
 class HeartFillClip:
     def __init__(self, canvas, cx, cy, scale):
@@ -12,10 +13,13 @@ class HeartFillClip:
         self.delay = 30
         self.increment = 0.02
 
+        self.start_time = time.time()
+        self.duration = 4.0  # sec，填滿所需時間
+
         self.outline_points = self.compute_heart_points()
         self.canvas.create_polygon(self.outline_points, outline="black", fill="", width=2)
 
-        self.fill_id = None
+        self.fill_id = None #逐步填滿時，要先把上一幀的狀況刪掉
         self.animate_fill()
 
     def compute_heart_points(self):
@@ -32,6 +36,10 @@ class HeartFillClip:
     def animate_fill(self):
         if self.fill_id:
             self.canvas.delete(self.fill_id)
+
+        # 時間驅動的填滿比例
+        elapsed = time.time() - self.start_time
+        self.fill_ratio = elapsed / self.duration
 
         # 重新生成遮罩心形：只顯示低於某一高度的點
         y_values = [y for (_, y) in self.outline_points]
