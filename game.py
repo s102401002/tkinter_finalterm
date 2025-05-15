@@ -89,13 +89,15 @@ class ElectricEyeGame(tk.Tk):
             self.player.attracting = True
             self.clicked_npc.walking = False
             self.clicked_npc.start_dialog(self)
+            self.clicked_npc.update(self.bg_offset)
 
     def _on_release(self, event):
         if self.clicked_npc:
             self.clicked_npc.stop_dialog()
             self.clicked_npc.walking = True
-            self.clicked_npc = None
             self.player.attracting = False
+            self.clicked_npc.update(self.bg_offset)
+            self.clicked_npc = None
     # --------------------------------------------------------
     # 載入背景與角色貼圖
     # --------------------------------------------------------
@@ -108,21 +110,7 @@ class ElectricEyeGame(tk.Tk):
         self.bg_img = ImageTk.PhotoImage(bg)
         self.max_offset = nw - WIDTH
 
-        # ---- 走路 / 跑步 貼圖 ----
-        imgs_rw = [Image.open(ASSETS_DIR / f'player/player_right_{i}.png') for i in range(7)]
-        imgs_lw = [Image.open(ASSETS_DIR / f'player/player_left_{i}.png')  for i in range(7)]
-        imgs_rr = [Image.open(ASSETS_DIR / f'player/player_right_run_{i}.png') for i in range(9)]
-        imgs_lr = [Image.open(ASSETS_DIR / f'player/player_left_run_{i}.png')  for i in range(9)]
-
-        def mk(img):                  # 統一縮放 (×1/3)
-            return ImageTk.PhotoImage(
-                img.resize((img.width//3, img.height//3), Image.Resampling.LANCZOS)
-            )
-
-        self.anim_right_walk = Animation([mk(i) for i in imgs_rw], WALK_FPS, FPS)
-        self.anim_left_walk  = Animation([mk(i) for i in imgs_lw], WALK_FPS, FPS)
-        self.anim_right_run  = Animation([mk(i) for i in imgs_rr], RUN_FPS, FPS)
-        self.anim_left_run   = Animation([mk(i) for i in imgs_lr], RUN_FPS, FPS)
+        
 
     # --------------------------------------------------------
     # 建立背景與玩家物件
@@ -138,16 +126,18 @@ class ElectricEyeGame(tk.Tk):
         # 玩家
         self.player = Player(self.canvas,
                              PLAYER_CENTER_X,
-                             HEIGHT - 170 ,
-                             self.anim_right_walk, self.anim_left_walk,
-                             self.anim_right_run,  self.anim_left_run)
-        
+                             HEIGHT - 190 ,
+                             asset_dir=ASSETS_DIR,
+                             walk_fps=WALK_FPS,
+                             run_fps=RUN_FPS,
+                             fps=FPS
+                             )
         # assets 資料夾路徑
-        npc_asset_dir = ASSETS_DIR / 'npc' / 'man'
+        npc_asset_dir = ASSETS_DIR / 'npc' 
 
         # 建立 NPC 物件
         self.npc_list = []
-        npc_y = [HEIGHT-140, HEIGHT-170,  HEIGHT-220,  HEIGHT-240] # 後面兩項靠近牆壁
+        npc_y = [HEIGHT-140, HEIGHT-160,  HEIGHT-220,  HEIGHT-240] # 後面兩項靠近牆壁
 
         for _ in range(7):  # 例如一次隨機生成 7 個
             idx = random.randrange(len(npc_y))
@@ -188,25 +178,37 @@ class ElectricEyeGame(tk.Tk):
     # 每幀更新
     # --------------------------------------------------------
     def _update(self):
-        # ---------- 1. 懸停檢查 ----------
-        pw = self.player.anim.frames[0].width()
-        ph = self.player.anim.frames[0].height()
-        self.player.hover = (abs(self.mouse_x - self.player.x) <= pw/2 and
-                             abs(self.mouse_y - self.player.y) <= ph/2)
-
-        # 如果player懸停或吸引中 → 只更新靜止圖然後 return
-        if self.player.hover or self.player.attracting:
-            self.player.idle = True
-            self.player.update()
-            
-            # 在 return 前面補上 NPC 更新 不然NPC會跟著玩家一起停下來
+     # =====================================================
+     # 1. 如果滑鼠懸停在 NPC 上（但不在吸引模式），先讓玩家站立不動，然後只更新 NPC
+     # =====================================================
+     # hover_npc: 已由 _on_mouse_move 更新
+        if (self.player.attracting) or (self.hover_npc and self.hover_npc.is_hovered):
+            # player 切站立圖（需要你在 Player 裡實作）
+            self.player.set_stand_image(focus_npc=self.hover_npc, mouse_x=self.mouse_x)
+            # update NPC
             for npc in self.npc_list:
                 npc.update(self.bg_offset)
-                if not npc.is_attracted:  # 正在被勾引的 NPC 不移動
+                if not npc.is_attracted:
                     npc.move(NPC_WALK_SPEED)
             return
 
-        # ---------- 2. 速度 / 動畫 切換 ----------
+        # =====================================================
+        # 2. 否則，如果游標在 player 身上 → 靜止並顯示 idle/frame0
+        # =====================================================
+        pw = self.player.anim.frames[0].width()
+        ph = self.player.anim.frames[0].height()
+        self.player.hover = (abs(self.mouse_x - self.player.x) <= pw/2 and
+                            abs(self.mouse_y - self.player.y) <= ph/2)
+
+        if self.player.hover:
+            self.player.idle = True
+            self.player.update()    # 顯示 idle 動畫
+            for npc in self.npc_list:
+                npc.update(self.bg_offset)
+                if not npc.is_attracted:
+                    npc.move(NPC_WALK_SPEED)
+            return
+         # ---------- 2. 速度 / 動畫 切換 ----------
         speed = self._determine_speed()
         self.running = (speed == RUN_SPEED)
         self.player.set_speed(speed,self.running)
@@ -287,6 +289,25 @@ class ElectricEyeGame(tk.Tk):
             npc.update(self.bg_offset)
             if not npc.is_attracted:  # 正在對話的 NPC 不移動
                 npc.move(NPC_WALK_SPEED)
+        
+        layers = []
+        # 玩家
+        px, py = self.canvas.coords(self.player.id)
+        layers.append((self.player.id, py))
+        # NPC 每個 layer 都要排序
+        for npc in self.npc_list:
+            for cid in (npc.id_walk, npc.id_flash, npc.id_weak):
+                # 取 y 座標，如果還沒 create 這層就跳過
+                try:
+                    _, yy = self.canvas.coords(cid)
+                except Exception:
+                    continue
+                layers.append((cid, yy))
+
+        # 按 y 升冪排序：y 小的先 raise，y 大的在最上
+        layers.sort(key=lambda t: t[1])
+        for cid, _ in layers:
+            self.canvas.tag_raise(cid)
 
     # --------------------------------------------------------
     # 主迴圈
