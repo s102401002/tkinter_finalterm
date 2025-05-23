@@ -97,8 +97,12 @@ class HeartFillClip:
                 return
             # 取得目前座標
             points = self.canvas.coords(self.fill_id)# 回傳愛心所有頂點的座標
+            if not points:
+                return
             xs = points[::2] # 從頭開始，每隔 2 個取一次：取出所有 x 值
             ys = points[1::2]# 從第 1 個開始，每隔 2 個取一次：取出所有 y 值
+            if not xs or not ys:
+                return
             x = float(sum(xs) / len(xs))
             y = float(sum(ys) / len(ys))
 

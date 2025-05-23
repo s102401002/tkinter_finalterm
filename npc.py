@@ -64,7 +64,7 @@ class NPC:
 
         self.is_attracted = False
         self.timer_seconds = 0
-        self.timer_label = None  # 由主程式呼叫時設定
+        # self.timer_label = None  # 由主程式呼叫時設定
         self.heart = None  # 存放 HeartFillClip 物件
 
         # 新增：hover 狀態旗標
@@ -179,10 +179,10 @@ class NPC:
                 target_y=player_foot_y, # 愛心填滿後，落下的目標y座標
                 on_fall_finish=remove_npc  # 愛心填滿後，把這個npc刪掉
             )
-            if not self.timer_label:
-                self.timer_label = tk.Label(root_window, text="", font=("Arial", 14), fg="white", bg="black")
-                self.timer_label.place(x=10, y=10)
-            self._update_timer(root_window)
+            # if not self.timer_label:
+            #     self.timer_label = tk.Label(root_window, text="", font=("Arial", 14), fg="white", bg="black")
+            #     self.timer_label.place(x=10, y=10)
+            # self._update_timer(root_window)
 
     def stop_dialog(self):
         self.is_attracted = False
@@ -202,9 +202,9 @@ class NPC:
                 # 已經填滿，讓它自然掉下來
                 pass
 
-        if self.timer_label:
-            self.timer_label.destroy()
-            self.timer_label = None
+        # if self.timer_label:
+        #     self.timer_label.destroy()
+        #     self.timer_label = None
 
     def _update_timer(self, root_window):
         if self.is_attracted:

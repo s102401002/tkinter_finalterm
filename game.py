@@ -46,6 +46,9 @@ class ElectricEyeGame(tk.Tk):
         self.switch_dx_scr  = 0
         self.switch_world_x = 0
 
+        #目前吃了幾個愛心
+        self.score = 0
+
         # 隨機位置 (畫面左 or 右隨機一邊)
         start_x = random.choice([50, WIDTH - 50])
         y = HEIGHT - 120 # 280
@@ -183,6 +186,29 @@ class ElectricEyeGame(tk.Tk):
             return 0
         return RUN_SPEED if abs(dx) > WIDTH * 0.3 else WALK_SPEED
 
+    '''
+    判斷有沒有吃到愛心
+    '''
+    def _check_heart_collision(self):
+        px, py = self.player.x, self.player.y
+        pw = self.player.anim.frames[0].width()
+        ph = self.player.anim.frames[0].height()
+
+        #把所有愛心抓出來掃一次
+        for heart_id in self.canvas.find_withtag('filled_heart'):
+            coords = self.canvas.coords(heart_id)
+            if not coords:
+                continue
+            xs = coords[::2]# 從頭開始，每隔 2 個取一次：取出所有 x 值
+            ys = coords[1::2]# 從第 1 個開始，每隔 2 個取一次：取出所有 y 值
+            hx = sum(xs) / len(xs)
+            hy = sum(ys) / len(ys)
+            if abs(hx - px) < pw // 2 and abs(hy - py) < ph // 2:
+                self.canvas.delete(heart_id)
+                self.score += 1
+                print("目前得分：", self.score)
+
+
     # --------------------------------------------------------
     # 每幀更新
     # --------------------------------------------------------
@@ -295,7 +321,8 @@ class ElectricEyeGame(tk.Tk):
 
         self.player.idle = self.player.hover or hit_right_edge or hit_left_edge
 
-        # ---------- 6. 更新影像 ----------
+        # ---------- 6. 更新影像、確認有沒有吃到愛心 ----------
+        self._check_heart_collision()
         self.player.update()
 
 
