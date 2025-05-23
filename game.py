@@ -20,7 +20,7 @@ RUN_FPS = 2
 NPC_WALK_FPS = 1
 WALK_SPEED = 3
 RUN_SPEED = 10
-NPC_WALK_SPEED = 1
+NPC_WALK_SPEED = 2
 ATTRACT_TIME = 5 # 吸引幾秒加分
 # ------------------- main game -------------------
 class ElectricEyeGame(tk.Tk):
@@ -157,7 +157,7 @@ class ElectricEyeGame(tk.Tk):
             npc = NPC(
                 self.canvas,
                 npc_asset_dir,
-                start_x=random.randint(300, self.bg_img.width() - 300),
+                start_x=random.randint(500, self.bg_img.width() - 500),
                 y=y,
                 walk_fps=NPC_WALK_FPS,
                 fps = FPS,
@@ -180,9 +180,9 @@ class ElectricEyeGame(tk.Tk):
             self.switch_dx_scr  = (tgt - self.player.x) / SWITCH_STEPS
             self.switch_world_x = self.bg_offset + self.player.x
 
-        # 距離小於 10 px → 停
+        # 距離小於 8 px → 停
         dx = self.mouse_x - self.player.x
-        if abs(dx) < 10:
+        if abs(dx) < 8:
             return 0
         return RUN_SPEED if abs(dx) > WIDTH * 0.3 else WALK_SPEED
 
