@@ -3,7 +3,7 @@ from PIL import Image, ImageTk
 import random
 import tkinter as tk
 from pathlib import Path
-
+from heart import HeartFillClip
 FLASH_FPS = 4
 WEAK_FPS = 2
 
@@ -65,6 +65,7 @@ class NPC:
         self.is_attracted = False
         self.timer_seconds = 0
         self.timer_label = None  # 由主程式呼叫時設定
+        self.heart = None  # 存放 HeartFillClip 物件
 
         # 新增：hover 狀態旗標
         self.is_hovered = False
@@ -157,6 +158,27 @@ class NPC:
             self.anim_attr_flash._loop_counter = 0
             self.anim_attr_weak._loop_counter  = 0
             self.timer_seconds = 0
+
+            def remove_npc():
+                self.canvas.delete(self.id_walk)
+                self.canvas.delete(self.id_flash)
+                self.canvas.delete(self.id_weak)
+                self.id = None # 把NPC的id拿掉，不再更新
+            # 加入愛心圖形 (顯示在 NPC 上方)
+            screen_x = self.canvas.coords(self.id_walk)[0]
+            heart_cx = screen_x
+            heart_cy = self.y - 80  # 調整位置顯示在 NPC 上方
+            player_y = root_window.player.y
+            player_h = root_window.player.anim.frames[0].height()
+            player_foot_y = player_y + player_h // 2 - 35
+            self.heart = HeartFillClip(
+                self.canvas,
+                heart_cx,
+                heart_cy,
+                scale=1.2,
+                target_y=player_foot_y, # 愛心填滿後，落下的目標y座標
+                on_fall_finish=remove_npc  # 愛心填滿後，把這個npc刪掉
+            )
             if not self.timer_label:
                 self.timer_label = tk.Label(root_window, text="", font=("Arial", 14), fg="white", bg="black")
                 self.timer_label.place(x=10, y=10)
@@ -170,6 +192,16 @@ class NPC:
         self.canvas.itemconfig(self.id_walk,  state='normal')
         # 重新設置為走路動畫
         self.anim = self.anim_walk_r if self.face_right else self.anim_walk_l
+
+        # 若愛心還沒填滿，刪除愛心
+        if self.heart:
+            if self.heart.fill_ratio < 1.03:
+                self.heart.stop()  
+                self.heart = None
+            else:
+                # 已經填滿，讓它自然掉下來
+                pass
+
         if self.timer_label:
             self.timer_label.destroy()
             self.timer_label = None

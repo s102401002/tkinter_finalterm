@@ -48,7 +48,7 @@ class ElectricEyeGame(tk.Tk):
 
         # 隨機位置 (畫面左 or 右隨機一邊)
         start_x = random.choice([50, WIDTH - 50])
-        y = HEIGHT - 120
+        y = HEIGHT - 120 # 280
 
         
         # ---- 事件與資源 ----
@@ -58,6 +58,7 @@ class ElectricEyeGame(tk.Tk):
         
         
         self.hover_npc = None # 判斷紀錄按下滑鼠時在不在npc上
+        self.clicked_npc = None  # 避免 _on_mouse_move 報錯
         # ---- 主迴圈 ----
         self._loop()
 
@@ -75,12 +76,20 @@ class ElectricEyeGame(tk.Tk):
         # ---- 判斷滑鼠是不是在npc上: 在這裡判斷好，再交給on_press和on_release處理----
         self.hover_npc = None
         for npc in self.npc_list:
-            x1, y1 = self.canvas.coords(npc.id)
+            if npc.id is None: # npc.py->start_dialog->remove_npc方法中有npc.i=None的操作
+                continue
+            coords = self.canvas.coords(npc.id)
+            if not coords:
+                continue
+            x1, y1 = coords
             img_w = npc.current_img.width()
             img_h = npc.current_img.height()
             if abs(e.x - x1) <= img_w // 2 and abs(e.y - y1) <= img_h // 2:
                 self.hover_npc = npc
                 return
+        # 按到一半時滑鼠離開原本npc位置 視為放開滑鼠 
+        if self.clicked_npc and self.hover_npc != self.clicked_npc:
+            self._on_release(e)
     def _on_click(self, event):
         pass
     def _on_press(self, event):
@@ -245,11 +254,17 @@ class ElectricEyeGame(tk.Tk):
             if d != 0:
                 # 背景真的捲動
                 self.bg_offset = no
-                self.canvas.move('all', -d, 0)
+                self.canvas.move('all', -d, 0) # 有可能刪掉愛心 因此將愛心的標籤獨立
                 # npc也跟著背景一起動
                 for npc in self.npc_list:
+                    if npc.id is None: # npc.py->start_dialog->remove_npc方法中有npc.i=None的操作
+                        continue
                     self.canvas.move(npc.id, -d, 0)
                 # 玩家在畫面固定點
+
+                # 把所有filled_heart的物件也移動
+                for heart_id in self.canvas.find_withtag('filled_heart'):
+                    self.canvas.move(heart_id, -d, 0)
                 self.player.x = PLAYER_RIGHT_X if self.player.face_right else PLAYER_LEFT_X
             else:
                 # 背景不能再捲 → 玩家自己在畫面內移動
@@ -286,6 +301,8 @@ class ElectricEyeGame(tk.Tk):
 
         # ---------- 7. 更新影像 ----------
         for npc in self.npc_list:
+            if npc.id is None: # npc.py->start_dialog->remove_npc方法中有npc.i=None的操作
+                continue
             npc.update(self.bg_offset)
             if not npc.is_attracted:  # 正在對話的 NPC 不移動
                 npc.move(NPC_WALK_SPEED)
@@ -296,6 +313,8 @@ class ElectricEyeGame(tk.Tk):
         layers.append((self.player.id, py))
         # NPC 每個 layer 都要排序
         for npc in self.npc_list:
+            if npc.id is None: # npc.py->start_dialog->remove_npc方法中有npc.i=None的操作
+                continue
             for cid in (npc.id_walk, npc.id_flash, npc.id_weak):
                 # 取 y 座標，如果還沒 create 這層就跳過
                 try:
@@ -308,7 +327,6 @@ class ElectricEyeGame(tk.Tk):
         layers.sort(key=lambda t: t[1])
         for cid, _ in layers:
             self.canvas.tag_raise(cid)
-
     # --------------------------------------------------------
     # 主迴圈
     # --------------------------------------------------------
