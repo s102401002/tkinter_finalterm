@@ -28,4 +28,4 @@ def resize_to_height(src_folder:  Path, dst_folder: Path, target_h: int):
     print(f"\n共處理 {count} 張圖片。")
 
 # 使用方法
-resize_to_height("assets_aligned\\npc\woman\\left\walk", "assets_aligned\\npc\woman\\left\walkk", target_h=220)
+resize_to_height("assets_aligned\\npc\woman\\right\walkk", "assets_aligned\\npc\woman\\right\walk", target_h=190)

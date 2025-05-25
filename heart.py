@@ -150,39 +150,7 @@ class HeartFillClip:
         flat = [c for xy in pts for c in xy]
         self.canvas.coords(self.fill_id, *flat)
    
-    '''
-    def _fall_parabola(self):
-        def step():
-            if not self.fill_id:
-                return
-            # 取得目前座標
-            points = self.canvas.coords(self.fill_id)# 回傳愛心所有頂點的座標
-            if not points:
-                return
-            xs = points[::2] # 從頭開始，每隔 2 個取一次：取出所有 x 值
-            ys = points[1::2]# 從第 1 個開始，每隔 2 個取一次：取出所有 y 值
-            if not xs or not ys:
-                return
-            x = float(sum(xs) / len(xs))
-            y = float(sum(ys) / len(ys))
-
-            dx = 0 # 往右速度
-            dy = self.fall_vy + self.gravity * self.t # 往下
-            self.canvas.move(self.fill_id, dx, dy)
-            self.t += 1
-            # 檢查是否到底
-            if y + dy >= self.target_y:
-                delta_y = self.target_y - y
-                self.canvas.move(self.fill_id, 0, delta_y)
-                self.fall_finished = True
-                #if self.on_fall_finish:
-                    
-                    #self.on_fall_finish() # 為建立時傳入的remove_npc函式
-                #return
-            self.canvas.after(30, step)
-        step()
-    
-    '''
+   
     
 if __name__ == '__main__':
     root = tk.Tk()

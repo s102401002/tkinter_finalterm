@@ -64,6 +64,7 @@ class ElectricEyeGame(tk.Tk):
         
         self.hover_npc = None # 判斷紀錄按下滑鼠時在不在npc上
         self.clicked_npc = None  # 避免 _on_mouse_move 報錯
+        self.attack_npc_girl = [] #現在screen中有幾個女生要攻擊
         # ---- 主迴圈 ----
         self._loop()
 
@@ -104,17 +105,26 @@ class ElectricEyeGame(tk.Tk):
                 return
             self.player.attracting = True
             self.clicked_npc.walking = False
+            
+            for girl in self.npc_girl_list:
+                screen_x = girl.world_x - self.bg_offset
+                if 0 <= screen_x <= WIDTH:
+                    girl.notice()
+                    #self.attack_npc_girl.append(girl.id)    
+            
             self.clicked_npc.start_dialog(self)
             self.clicked_npc.update(self.bg_offset)
 
     def _on_release(self, event):
         if self.clicked_npc:
-            
             self.clicked_npc.stop_dialog()
+            for girl in self.npc_girl_list:
+                if girl.shock:
+                    girl.shock = False
+                    girl.update(self.bg_offset)
             if not self.clicked_npc.is_dead:
-                
                 self.clicked_npc.walking = True
-            
+
             self.player.attracting = False
             self.clicked_npc.update(self.bg_offset)
             self.clicked_npc = None
@@ -157,7 +167,7 @@ class ElectricEyeGame(tk.Tk):
 
         # 建立 NPC 物件
         self.npc_list = []
-        #self.npc_girl_list = []
+        
         npc_y = [HEIGHT-140, HEIGHT-160,  HEIGHT-220,  HEIGHT-240] # 後面兩項靠近牆壁
 
         for _ in range(7):  # 例如一次隨機生成 7 個
@@ -177,6 +187,23 @@ class ElectricEyeGame(tk.Tk):
                 self.canvas.tag_raise(npc.id, 'bg') #在player之下，背景之上
             self.npc_list.append(npc)
        
+        self.npc_girl_list = []
+        for _ in range(4):  # 例如一次隨機生成 7 個
+            idx = random.randrange(len(npc_y))
+            y = npc_y[idx]
+            npc = NPC_GIRL(
+                self.canvas,
+                npc_asset_dir,
+                start_x=random.randint(1000, self.bg_img.width() - 1000),
+                y=y,
+                walk_fps=NPC_WALK_FPS,
+                fps = FPS,
+                world_left=300,
+                world_right=self.bg_img.width() - 300
+            )
+            if idx == 2 or idx == 3:
+                self.canvas.tag_raise(npc.id, 'bg') #在player之下，背景之上
+            self.npc_girl_list.append(npc)
        
     # --------------------------------------------------------
     # 依滑鼠距離決定速度
@@ -228,26 +255,35 @@ class ElectricEyeGame(tk.Tk):
     # 每幀更新
     # --------------------------------------------------------
     def _update(self):
-    
-        
+        # =====================================================
+        # 0. 表示愛心已填滿，玩家可以開始移動，要同步更新愛心位置     
+        # =====================================================
         for npc in self.npc_list:
             h = getattr(npc, 'heart', None)
             if h:  
-                if h.fall_finished or h.if_startfall:        
+                if h.fall_finished or h.if_startfall:  
                     h.update(self.bg_offset)
         
      # =====================================================
-     # 1. 如果滑鼠懸停在 NPC 上（但不在吸引模式），先讓玩家站立不動，然後只更新 NPC
+     # 1. 如果滑鼠懸停在 NPC 上，或是在吸引模式，先讓玩家站立不動，然後只更新 NPC
      # =====================================================
      # hover_npc: 已由 _on_mouse_move 更新
         if (self.player.attracting) or (self.hover_npc and self.hover_npc.is_hovered):
             # player 切站立圖（需要在 Player 裡實作）
             self.player.set_stand_image(focus_npc=self.hover_npc, mouse_x=self.mouse_x)
+
             # update NPC
             for npc in self.npc_list:
                 npc.update(self.bg_offset)
                 if not npc.is_attracted:
                     npc.move(NPC_WALK_SPEED)
+
+            # update NPC_GIRL
+            for girl in self.npc_girl_list:
+                girl.update(self.bg_offset)
+                if girl.walking:
+                    girl.move(NPC_WALK_SPEED)      
+
             return
 
         # =====================================================
@@ -261,10 +297,17 @@ class ElectricEyeGame(tk.Tk):
         if self.player.hover:
             self.player.idle = True
             self.player.update()    # 顯示 idle 動畫
+           
             for npc in self.npc_list:
                 npc.update(self.bg_offset)
                 if not npc.is_attracted:
                     npc.move(NPC_WALK_SPEED)
+            
+            # update NPC_GIRL
+            for girl in self.npc_girl_list:
+                girl.update(self.bg_offset)
+                if girl.walking:
+                    girl.move(NPC_WALK_SPEED)     
             return
          # ---------- 2. 速度 / 動畫 切換 ----------
         speed = self._determine_speed()
@@ -303,12 +346,16 @@ class ElectricEyeGame(tk.Tk):
             if d != 0:
                 # 背景真的捲動
                 self.bg_offset = no
-                self.canvas.move('all', -d, 0) # 有可能刪掉愛心 因此將愛心的標籤獨立
+                self.canvas.move('all', -d, 0) 
                 # npc也跟著背景一起動
                 for npc in self.npc_list:
-                    if npc.id is None: # npc.py->start_dialog->remove_npc方法中有npc.i=None的操作
+                    if npc.id is None: 
                         continue
                     self.canvas.move(npc.id, -d, 0)
+                for girl in self.npc_girl_list:
+                    if girl.id is None:
+                        continue
+                    self.canvas.move(girl.id, -d, 0)
                 # 玩家在畫面固定點
                 
                 self.player.x = PLAYER_RIGHT_X if self.player.face_right else PLAYER_LEFT_X
@@ -342,21 +389,6 @@ class ElectricEyeGame(tk.Tk):
         )
 
         self.player.idle = self.player.hover or hit_right_edge or hit_left_edge
-        '''
-         # 立刻對每個已經落地的心型做「增量移動」對齊
-        for npc in self.npc_list:
-            h = getattr(npc, 'heart', None)
-            if not h or not h.fall_finished or not h.fill_id:
-                continue
-            # 計算理想的螢幕 X
-            new_x = h.world_x - self.bg_offset
-            # 差值
-            dx = new_x - h.screen_x
-            if dx:
-                # 只做一次 move，最輕量
-                self.canvas.move(h.fill_id, dx, 0)
-                h.screen_x = new_x
-        '''
        
         # ---------- 6. 更新影像、確認有沒有吃到愛心 ----------
         self._check_heart_collision()
@@ -364,12 +396,18 @@ class ElectricEyeGame(tk.Tk):
        
         # ---------- 7. 更新影像 ----------
         for npc in self.npc_list:
-            if npc.id is None: # npc.py->start_dialog->remove_npc方法中有npc.i=None的操作
+            if npc.id is None: 
                 continue
             npc.update(self.bg_offset)
             if not npc.is_attracted:  # 正在對話的 NPC 不移動
                 npc.move(NPC_WALK_SPEED)
-            
+        
+        for girl in self.npc_girl_list:
+            if girl.id is None: 
+                continue
+            girl.update(self.bg_offset)
+            if  girl.walking:  # 正在對話的 NPC 不移動
+                girl.move(NPC_WALK_SPEED)    
         
         layers = []
         # 玩家
@@ -380,6 +418,17 @@ class ElectricEyeGame(tk.Tk):
             if npc.id is None: # npc.py->start_dialog->remove_npc方法中有npc.i=None的操作
                 continue
             for cid in (npc.id_walk, npc.id_flash, npc.id_weak):
+                # 取 y 座標，如果還沒 create 這層就跳過
+                try:
+                    _, yy = self.canvas.coords(cid)
+                except Exception:
+                    continue
+                layers.append((cid, yy))
+        
+        for girl in self.npc_girl_list:
+            if girl.id is None: 
+                continue
+            for cid in (girl.id_walk, girl.id_exclamation):
                 # 取 y 座標，如果還沒 create 這層就跳過
                 try:
                     _, yy = self.canvas.coords(cid)

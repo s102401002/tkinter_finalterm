@@ -63,8 +63,7 @@ class NPC(Character):
             ) for img in img_focus
         ]
 
-         # 計算每幀在主迴圈中持續的次數
-       
+        # 計算每幀在主迴圈中持續的次數  
         self.hover_loops_per_frame = max(1, (fps // HOVER_FPS) // FOCUS_FRAME_NUM)
         self.died_loops_per_frame = max(1, (fps // DIED_FPS) // DIED_FRAME_NUM)
         # 懸停動畫計數器，超出後停在最後一幀
@@ -353,7 +352,6 @@ class NPC(Character):
         #     self.timer_label = None
     
     def on_heart_filled(self):
-        print(f"NPC {self.npc_id} 的愛心填滿！進入下一段動畫")
         self.is_attracted = False
         # 倒地與復活動畫
         # 清除不再需要的圖層

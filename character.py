@@ -22,22 +22,6 @@ class Character:
             frames.append(ImageTk.PhotoImage(img))
         return Animation(frames, anim_fps, game_fps)
 
-    def move(self, speed: int):
-        if self.stopping or getattr(self, 'is_attracted', False) or getattr(self, 'is_dead', False):
-            return
-
-        dx = speed if self.face_right else -speed
-        nxt = self.world_x + dx
-
-        if nxt <= self.bdr_left:
-            self.world_x = self.bdr_left
-            self._handle_boundary_hit(left=True)
-        elif nxt >= self.bdr_right:
-            self.world_x = self.bdr_right
-            self._handle_boundary_hit(left=False)
-        else:
-            self.world_x = nxt
-
     def _handle_boundary_hit(self, left: bool):
         self.stopping = True
         self._end_hits += 1
