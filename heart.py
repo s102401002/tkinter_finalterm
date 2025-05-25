@@ -10,11 +10,11 @@ class HeartFillClip:
         self.screen_x = screen_x  # 初始時等於畫面座標
         self.cy = cy
         self.scale = scale
-        self.steps = 15
+        self.steps = 30
         self.fill_ratio = 0.0  # 從 0.0 到 1.0
         self.if_startfall = False
         self.delay = 30
-        self.increment = 0.02git add .
+        self.increment = 0.02
 
         self.start_time = time.time()
         self.duration = 2.0  # sec，填滿所需時間
