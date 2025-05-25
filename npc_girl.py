@@ -12,7 +12,7 @@ class NPC_GIRL(Character):
        # 世界座標與原點
         self.origin = world_left
         self.max_range = int((world_right - world_left)/4) # 固定最大區間
-        self.cur_range = random.randint(20, self.max_range)            # 當前區間，初始等於最大
+        self.cur_range = random.randint(20, self.max_range) # 當前區間，初始等於最大
         self.world_x = start_x
         self.y = y
         # 動態邊界
