@@ -6,6 +6,7 @@ from animation import Animation
 from player import Player
 from npc import NPC
 from npc_girl import NPC_GIRL
+from healthBar import HealthBar
 # ------------------- config -------------------
 WIDTH, HEIGHT = 900, 400
 FPS = 60
@@ -29,10 +30,20 @@ class ElectricEyeGame(tk.Tk):
         super().__init__()
         self.title("電眼美女")
         self.resizable(False, False)
+        
+        
+        self.geometry(f"{WIDTH}x{HEIGHT + 50}")  # 設定整個視窗高度
         # ---- 畫布 ----
-        self.canvas = tk.Canvas(self, width=WIDTH, height=HEIGHT,
-                                bg="#000000", highlightthickness=0)
-        self.canvas.pack()
+        self.canvas = tk.Canvas(self, width=WIDTH, height=HEIGHT, bg="#000000", highlightthickness=0)
+        self.canvas.place(x=0, y=50)
+        #第二個canvas放血條、記分板、時間
+        self.ui_canvas = tk.Canvas(self, width=WIDTH, height=50, bg="#007500", highlightthickness=0)
+        self.ui_canvas.place(x=0, y=0)
+        
+        # 暫停的相關參數
+        self.paused = False
+        self.pause_menu_items = []
+
 
         # ---- 狀態變數 ----
         self.mouse_x = PLAYER_CENTER_X
@@ -60,7 +71,7 @@ class ElectricEyeGame(tk.Tk):
         self._bind_events()
         self._load_assets()
         self._setup_world()
-        
+        self._setup_ui() #建立血條、時間...
         
         self.hover_npc = None # 判斷紀錄按下滑鼠時在不在npc上
         self.clicked_npc = None  # 避免 _on_mouse_move 報錯
@@ -68,6 +79,17 @@ class ElectricEyeGame(tk.Tk):
         # ---- 主迴圈 ----
         self._loop()
 
+    """
+    自訂清除函式，避免結束時的錯誤訊息
+    """
+    def destroy(self):
+        # 主動清除 canvas 與引用
+        self.canvas.delete("all")
+        self.ui_canvas.delete("all")
+        self.canvas = None
+        self.ui_canvas = None
+        self.bg_img = None  # 避免 PIL 圖像殘留
+        super().destroy()
     # --------------------------------------------------------
     # 事件綁定
     # --------------------------------------------------------
@@ -114,6 +136,9 @@ class ElectricEyeGame(tk.Tk):
             
             self.clicked_npc.start_dialog(self)
             self.clicked_npc.update(self.bg_offset)
+
+            # 扣一小段血
+            self.health_bar.lose_one_step()
 
     def _on_release(self, event):
         if self.clicked_npc:
@@ -204,7 +229,41 @@ class ElectricEyeGame(tk.Tk):
             if idx == 2 or idx == 3:
                 self.canvas.tag_raise(npc.id, 'bg') #在player之下，背景之上
             self.npc_girl_list.append(npc)
-       
+    def _setup_ui(self):
+        self.health_bar = HealthBar(self.ui_canvas, x=20, y=20, spacing=35, max_hearts=9, initial_full=4)
+        # 暫停按鈕
+        self.pause_btn = self.ui_canvas.create_oval(840, 5, 880, 45, fill="red", outline="white")
+        self.pause_text = self.ui_canvas.create_text(860, 25, text="||", fill="white", font=("Arial", 14, "bold"))
+        self.ui_canvas.tag_bind(self.pause_btn, "<Button-1>", self._toggle_pause)
+        self.ui_canvas.tag_bind(self.pause_text, "<Button-1>", self._toggle_pause)
+
+        # 時鐘圓形（佔位）+ 分數文字
+        self.clock_circle = self.ui_canvas.create_oval(400, 5, 440, 45, fill="white", outline="black")
+        self.score_text = self.ui_canvas.create_text(650, 25, text=f"Score: {self.score}", fill="white", font=("Arial", 24))
+    def _update_score_display(self):
+        self.ui_canvas.itemconfig(self.score_text, text=f"Score: {self.score}")
+    def _toggle_pause(self, event=None):
+        self.paused = not self.paused
+        if self.paused:
+            self.ui_canvas.config(height=HEIGHT, bg="white") #暫時把ui_canva拉大 才能看到其他選項
+            self._show_pause_menu()
+        else:
+            self._hide_pause_menu()
+            self.ui_canvas.config(height=50, bg="#007500")  # 恢復原高度與樣式
+    def _show_pause_menu(self):
+        overlay = self.ui_canvas.create_rectangle(300, 100, 600, 300, fill="white", outline="black")
+        text_continue = self.ui_canvas.create_text(450, 160, text="繼續遊戲", font=("Arial", 14), fill="black")
+        text_quit = self.ui_canvas.create_text(450, 220, text="結束遊戲", font=("Arial", 14), fill="black")
+
+        self.pause_menu_items = [overlay, text_continue, text_quit]
+
+        self.ui_canvas.tag_bind(text_continue, "<Button-1>", lambda e: self._toggle_pause())
+        self.ui_canvas.tag_bind(text_quit, "<Button-1>", lambda e: self.destroy())
+
+    def _hide_pause_menu(self):
+        for item in self.pause_menu_items:
+            self.ui_canvas.delete(item)
+        self.pause_menu_items.clear()
     # --------------------------------------------------------
     # 依滑鼠距離決定速度
     # --------------------------------------------------------
@@ -248,7 +307,9 @@ class ElectricEyeGame(tk.Tk):
                     npc.heart = None
                     
                     self.score += 1
-                    print("目前得分：", self.score)
+                    self._update_score_display()# 更新記分板
+
+                    self.health_bar.gain(1)  # 吃到愛心補一顆
 
 
     # --------------------------------------------------------
@@ -440,11 +501,13 @@ class ElectricEyeGame(tk.Tk):
         layers.sort(key=lambda t: t[1])
         for cid, _ in layers:
             self.canvas.tag_raise(cid)
+
     # --------------------------------------------------------
     # 主迴圈
     # --------------------------------------------------------
     def _loop(self):
-        self._update()
+        if not self.paused:
+            self._update()
         self.after(int(1000 / FPS), self._loop)
 
 

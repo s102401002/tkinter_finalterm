@@ -8,14 +8,14 @@ class Heart:
         self.cx = cx
         self.cy = cy
         self.scale = scale
-        self.steps = 200
+        self.steps = 30
         self.fill_ratio = 1.03
-        self.decrement = 0.02
+        self.decrement = 0.1
         self.delay = 30
 
         self.outline_points = self.compute_heart_points()
         self.outline_id = self.canvas.create_polygon(
-            self.outline_points, outline="black", fill="", width=2
+            self.outline_points, outline="black", fill="", width=2, tags="health_ui"
         )
         self.fill_id = None
         self.fill_ratio = 0.0
@@ -38,7 +38,7 @@ class Heart:
         threshold_y = max_y - (max_y - min_y) * self.fill_ratio
         clipped = [(x, y) for (x, y) in self.outline_points if y > threshold_y]
         if len(clipped) >= 3:
-            self.fill_id = self.canvas.create_polygon(clipped, fill="red", outline="")
+            self.fill_id = self.canvas.create_polygon(clipped, fill="red", outline="", tags="health_ui")
 
     def animate_reverse_step(self, reduce_by=None):
         if reduce_by == None:
@@ -66,12 +66,12 @@ class HealthBar:
         self.spacing = spacing
         self.max_hearts = max_hearts
         self.initial_full = initial_full
-        self.loss_speed = 0.02 # 與Heart->self.decrement配合
+        self.loss_speed = 0.1 # 與Heart->self.decrement配合
         self.hearts = []
 
         for i in range(self.max_hearts):
             cx = x + i * spacing
-            h = Heart(canvas, cx, y, scale=1.2)
+            h = Heart(canvas, cx, y, scale=0.8)
             self.hearts.append(h)
         self._draw_initial()
 
