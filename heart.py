@@ -10,11 +10,11 @@ class HeartFillClip:
         self.screen_x = screen_x  # 初始時等於畫面座標
         self.cy = cy
         self.scale = scale
-        self.steps = 100
+        self.steps = 15
         self.fill_ratio = 0.0  # 從 0.0 到 1.0
         self.if_startfall = False
         self.delay = 30
-        self.increment = 0.02
+        self.increment = 0.02git add .
 
         self.start_time = time.time()
         self.duration = 2.0  # sec，填滿所需時間
@@ -51,6 +51,8 @@ class HeartFillClip:
 
     def animate_fill(self):
         # 每次 animate_fill 前，重建 outline
+        if self.stopped:
+            return  # 停止更新
         if self.outline_id:
             self.canvas.delete(self.outline_id)
         self.outline_points = self.compute_heart_points()
@@ -59,8 +61,7 @@ class HeartFillClip:
         )
         if self.fill_id:
             self.canvas.delete(self.fill_id)
-        if self.stopped:
-            return  # 停止更新
+        
         # 時間驅動的填滿比例
         elapsed = time.time() - self.start_time
         self.fill_ratio = elapsed / self.duration
