@@ -3,19 +3,23 @@ import math
 import time
 
 class HeartFillClip:
-    def __init__(self, canvas, cx, cy, scale, target_y = 280, on_fall_finish=None):
+    def __init__(self, canvas, cx, screen_x, cy, scale, target_y = 280, on_fall_finish=None):
         self.canvas = canvas
-        self.cx = cx
+        self.world_x = cx  # 記錄真實世界座標
+        self.bg_offset = cx-screen_x
+        self.screen_x = screen_x  # 初始時等於畫面座標
         self.cy = cy
         self.scale = scale
-        self.steps = 200
+        self.steps = 100
         self.fill_ratio = 0.0  # 從 0.0 到 1.0
+        self.if_startfall = False
         self.delay = 30
         self.increment = 0.02
 
         self.start_time = time.time()
         self.duration = 2.0  # sec，填滿所需時間
-
+        self.fall_finished = False
+        
         '''
         填滿後掉落所需參數
         '''
@@ -24,6 +28,7 @@ class HeartFillClip:
         self.gravity = 0.5  # 重力加速度（可調整）
         self.target_y = target_y
         self.on_fall_finish = on_fall_finish
+        
 
         self.outline_points = self.compute_heart_points()
         self.outline_id = self.canvas.create_polygon(
@@ -38,14 +43,20 @@ class HeartFillClip:
         points = []
         for i in range(self.steps):
             t = (i / self.steps) * 2 * math.pi
-            x = 16 * math.sin(t)**3
-            y = 13 * math.cos(t) - 5 * math.cos(2*t) - 2 * math.cos(3*t) - math.cos(4*t)
-            x *= self.scale
-            y *= -self.scale
-            points.append((self.cx + x, self.cy + y))
+            x = 16 * math.sin(t)**3 * self.scale
+            y = -(13 * math.cos(t) - 5 * math.cos(2*t) - 2 * math.cos(3*t) - math.cos(4*t)) * self.scale
+           
+            points.append((self.screen_x + x, self.cy + y))
         return points
 
     def animate_fill(self):
+        # 每次 animate_fill 前，重建 outline
+        if self.outline_id:
+            self.canvas.delete(self.outline_id)
+        self.outline_points = self.compute_heart_points()
+        self.outline_id = self.canvas.create_polygon(
+            self.outline_points, outline="black", fill="", width=2
+        )
         if self.fill_id:
             self.canvas.delete(self.fill_id)
         if self.stopped:
@@ -68,7 +79,7 @@ class HeartFillClip:
                 clipped_points,
                 fill="red",
                 outline="",
-                tags='filled_heart' # 獨立愛心的tag避免被刪
+                tags=('filled_heart')
             )
 
         # 更新比例
@@ -76,8 +87,12 @@ class HeartFillClip:
         if self.fill_ratio <= 1.03: # 用1.0會缺一塊 可能是浮點數精度問題?
             self.canvas.after(self.delay, self.animate_fill)
         else:
+            if self.on_fall_finish:
+                self.on_fall_finish() ## call back通知npc
             # 填滿後啟動掉落動畫
+            self.if_startfall = True
             self._start_fall()
+            
     def stop(self):
         self.stopped = True
         # 不刪除已填滿的 fill_id
@@ -86,11 +101,55 @@ class HeartFillClip:
                 self.canvas.delete(self.fill_id)
         if self.outline_id:
             self.canvas.delete(self.outline_id)
+    
     def _start_fall(self):
         if self.outline_id:
             self.canvas.delete(self.outline_id)
         self._fall_parabola()
 
+    def _fall_parabola(self):
+        """以拋物線 y = v0·t + ½gt² 掉落；整顆心用 move() 直移不重畫。"""
+        # ① 若填滿階段留下殘影，先清掉再畫一顆完整心形
+        if self.fill_id:
+            self.canvas.delete(self.fill_id)
+        self.fill_id = self.canvas.create_polygon(
+            self.compute_heart_points(),
+            fill="red", outline="", tags='filled_heart'
+        )
+
+        self.t = 0                       # 時間步
+        def step():
+            dy  = self.fall_vy + self.gravity * self.t
+            self.cy += dy                # 更新邏輯座標（若之後要碰撞可以用到）
+            self.t  += 1
+
+            # ② 只搬移，不重畫
+            self.canvas.move(self.fill_id, 0, dy)
+
+            # ③ 落地判斷 —— 取所有 y，計算中心點
+            ys = self.canvas.coords(self.fill_id)[1::2]   # 每 2 個取一次 ➜ y 座標
+            center_y = sum(ys) / len(ys)
+            if center_y >= self.target_y:
+                # 精準貼地
+                self.canvas.move(self.fill_id, 0, self.target_y - center_y)
+                self.fall_finished = True
+                self.if_startfall = False
+                return
+            self.canvas.after(30, step)
+        step()
+    
+    
+    def update(self, bg_offset: int):
+        """同步世界 → 螢幕座標"""
+        self.bg_offset = bg_offset
+        if not self.fill_id:      # 只要多邊形存在就更新，不管是否落地
+            return
+        self.screen_x = self.world_x - self.bg_offset
+        pts = self.compute_heart_points()
+        flat = [c for xy in pts for c in xy]
+        self.canvas.coords(self.fill_id, *flat)
+   
+    '''
     def _fall_parabola(self):
         def step():
             if not self.fill_id:
@@ -106,7 +165,7 @@ class HeartFillClip:
             x = float(sum(xs) / len(xs))
             y = float(sum(ys) / len(ys))
 
-            dx = 1.5 # 往右速度
+            dx = 0 # 往右速度
             dy = self.fall_vy + self.gravity * self.t # 往下
             self.canvas.move(self.fill_id, dx, dy)
             self.t += 1
@@ -114,11 +173,16 @@ class HeartFillClip:
             if y + dy >= self.target_y:
                 delta_y = self.target_y - y
                 self.canvas.move(self.fill_id, 0, delta_y)
-                if self.on_fall_finish:
-                    self.on_fall_finish() # 為建立時傳入的remove_npc函式
-                return
+                self.fall_finished = True
+                #if self.on_fall_finish:
+                    
+                    #self.on_fall_finish() # 為建立時傳入的remove_npc函式
+                #return
             self.canvas.after(30, step)
         step()
+    
+    '''
+    
 if __name__ == '__main__':
     root = tk.Tk()
     canvas = tk.Canvas(root, width=500, height=500, bg="white")

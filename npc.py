@@ -4,13 +4,16 @@ import random
 import tkinter as tk
 from pathlib import Path
 from heart import HeartFillClip
+from character import Character
 FLASH_FPS = 4
 WEAK_FPS = 2
+DIED_FPS = 1
 HOVER_FPS = 10  # 每秒顯示懸停動畫的幀率
-HOVER_FRAMES = 3  # 懸停動畫的總幀數
+FOCUS_FRAME_NUM = 3  # 懸停動畫的總幀數
+DIED_FRAME_NUM = 7
 HOVER_OFFSET = 70  # 懸停動畫相對於 NPC 的垂直偏移量
 HOVER_OFFSET_X = 30
-class NPC:
+class NPC(Character):
     _id_counter = 0
     def __init__(self, canvas: tk.Canvas, asset_dir: Path, start_x: int, y: int, walk_fps: int,fps: int, world_left: int, world_right: int):
         self.canvas = canvas
@@ -34,30 +37,39 @@ class NPC:
         NPC._id_counter += 1
 
         # 載入圖片
-        self.anim_walk_r = self._load_animation(asset_dir / 'man/right', walk_fps, fps, 13)
-        self.anim_walk_l = self._load_animation(asset_dir / 'man/left', walk_fps, fps, 13)
+        self.anim_walk_r = self._load_animation(asset_dir / 'man/right/walk', walk_fps, fps, 13,3)
+        self.anim_walk_l = self._load_animation(asset_dir / 'man/left/walk', walk_fps, fps, 13,3)
+        
+        self.anim_died_r = self._load_animation(asset_dir / 'man/right/died', DIED_FPS, fps, 7,3)
+        self.anim_died_l = self._load_animation(asset_dir / 'man/left/died', DIED_FPS, fps, 7,3)
         
         img_attr_flash = [Image.open(asset_dir / f'attracted/flash_{i}.png') for i in range(4)]
         img_attr_weak = [Image.open(asset_dir / f'attracted/weakening_{i}.png') for i in range(2)]
-        def mk(img):                  # 統一縮放 (×1/3)
+        
+        
+        def mk(img):                  
             return ImageTk.PhotoImage(
-                img.resize((img.width//1, img.height//1), Image.Resampling.LANCZOS)
+                img.resize((img.width, img.height), Image.Resampling.LANCZOS)
             )
+        
         self.anim_attr_flash = Animation([mk(i) for i in img_attr_flash], FLASH_FPS, fps)
         self.anim_attr_weak = Animation([mk(i) for i in img_attr_weak], WEAK_FPS, fps)
         
          # 載入懸停動畫
-        img_hover = [Image.open(asset_dir / f'focus//focus_{i}.png') for i in range(3)]
-        self.hover_frames = [
+        img_focus = [Image.open(asset_dir / f'focus//focus_{i}.png') for i in range(3)]
+        self.anim_focus = [
             ImageTk.PhotoImage(
                 img.resize((img.width//3, img.height//3), Image.Resampling.LANCZOS)
-            ) for img in img_hover
+            ) for img in img_focus
         ]
+
          # 計算每幀在主迴圈中持續的次數
-        loops_per_cycle = fps // HOVER_FPS
-        self.hover_loops_per_frame = max(1, loops_per_cycle // HOVER_FRAMES)
+       
+        self.hover_loops_per_frame = max(1, (fps // HOVER_FPS) // FOCUS_FRAME_NUM)
+        self.died_loops_per_frame = max(1, (fps // DIED_FPS) // DIED_FRAME_NUM)
         # 懸停動畫計數器，超出後停在最後一幀
-        self._hover_counter = self.hover_loops_per_frame * HOVER_FRAMES
+        self._hover_counter = self.hover_loops_per_frame * FOCUS_FRAME_NUM
+        self._died_counter = self.hover_loops_per_frame * DIED_FRAME_NUM
 
         # 設定初始動畫
         self.anim = self.anim_walk_r if self.face_right else self.anim_walk_l
@@ -81,9 +93,11 @@ class NPC:
         
          # 懸停動畫，隱藏並置於走路圖層上方
         self.id_hover = self.canvas.create_image(screen_x-HOVER_OFFSET_X, self.y-HOVER_OFFSET,
-                                                 image=self.hover_frames[0],
+                                                 image=self.anim_focus[0],
                                                  state='hidden')
-        
+        self.id_died = self.canvas.create_image(screen_x, self.y, 
+                                                image=self.anim_died_r.frames[0],
+                                                state='hidden')
         # 確保閃光在衰弱之下
         self.canvas.tag_lower(self.id_flash, self.id_weak)
         
@@ -95,7 +109,9 @@ class NPC:
         self.id = self.id_walk
         self.walking = True
 
-        self.is_attracted = False
+        self.is_attracted = False #是否正在被電
+        self.is_dead = False #是否愛心已填滿並倒地
+        self.pose_final = False
         self.timer_seconds = 0
         # self.timer_label = None  # 由主程式呼叫時設定
         self.heart = None  # 存放 HeartFillClip 物件
@@ -104,7 +120,7 @@ class NPC:
         self.is_hovered = False
 
        # 把所有 layer 都加上同一組 tag： f"npc{self.npc_id}"
-        self._tag = f"npc{self.npc_id}"
+        self._tag = f"npc_man{self.npc_id}"
         for cid in (self.id_walk, self.id_flash, self.id_weak, self.id_hover):
             self.canvas.addtag_withtag(self._tag, cid)
 
@@ -128,16 +144,16 @@ class NPC:
         # 隱藏懸停瞄準圖層，並停在初始狀態
         self.canvas.itemconfig(self.id_hover, state='hidden')
 
-    def _load_animation(self, dir_path: Path, walk_fps: int, fps: int, range_id: int):
+    def _load_animation(self, dir_path: Path, walk_fps: int, fps: int, range_id: int , size_r:int):
         frames = []
         for i in range(0, range_id):  # 0.png ~ 13.png
             img = Image.open(dir_path / f'{i}.png')
-            img = img.resize((img.width//3, img.height//3), Image.Resampling.LANCZOS)
+            img = img.resize((img.width//size_r, img.height//size_r), Image.Resampling.LANCZOS)
             frames.append(ImageTk.PhotoImage(img))
         return Animation(frames, walk_fps, fps)
     
     def move(self, speed: int):
-        if self.stopping or self.is_attracted:
+        if self.stopping or self.is_attracted or self.is_dead:
             return
         dx = speed if self.face_right else -speed
         nxt = self.world_x + dx
@@ -177,11 +193,26 @@ class NPC:
 
 
     def update(self, bg_offset: int):
+        if hasattr(self, 'heart') and self.heart and self.heart.fall_finished:
+            self.heart.update(bg_offset)
         screen_x = self.world_x - bg_offset
-        # 更新位置
+        if self.is_dead:
+            self.canvas.coords(self.id_died, screen_x, self.y)
+            if not self.pose_final:
+                frame_idx = min(self._died_counter // self.died_loops_per_frame,DIED_FRAME_NUM - 1)
+                if self._died_counter < self.died_loops_per_frame * DIED_FRAME_NUM:
+                    #print(f"{self._died_counter}")
+                    self._died_counter += 1
+                    self.current_img = self.anim.next()
+                    self.canvas.itemconfig(self.id_died,state='normal', image=self.current_img)
+                else:
+                    self.pose_final = True
+            return
+
         for cid in (self.id_walk, self.id_flash, self.id_weak, self.id_hover):
-            y = self.y - (HOVER_OFFSET if cid == self.id_hover else 0)
-            self.canvas.coords(cid, screen_x, y)
+            if cid is not None:
+                y = self.y - (HOVER_OFFSET if cid == self.id_hover else 0)
+                self.canvas.coords(cid, screen_x, y)
          # 停止模式：保持 current_img，隱藏其他
         if self.stopping:
             self.canvas.itemconfig(self.id_walk, state='normal', image=self.current_img)
@@ -189,9 +220,9 @@ class NPC:
                 self.canvas.itemconfig(cid, state='hidden')
             if self.is_hovered:
                  # 懸停動畫
-                frame_idx = min(self._hover_counter // self.hover_loops_per_frame, HOVER_FRAMES - 1)
-                self.canvas.itemconfig(self.id_hover, image=self.hover_frames[frame_idx])
-                if self._hover_counter < self.hover_loops_per_frame * HOVER_FRAMES:
+                frame_idx = min(self._hover_counter // self.hover_loops_per_frame, FOCUS_FRAME_NUM - 1)
+                self.canvas.itemconfig(self.id_hover, image=self.anim_focus[frame_idx])
+                if self._hover_counter < self.hover_loops_per_frame * FOCUS_FRAME_NUM:
                     self._hover_counter += 1
                 # 確保懸停圖層在最上層
                 self.canvas.tag_raise(self.id_hover)
@@ -199,6 +230,8 @@ class NPC:
                 self.current_img = self.anim.next()
                 self.canvas.itemconfig(self.id_walk, state='normal', image=self.current_img)
             return
+        
+            
         if self.is_attracted:
             # 吸引特效
             img_f = self.anim_attr_flash.next()
@@ -213,9 +246,9 @@ class NPC:
             self.canvas.itemconfig(self.id_weak, state='hidden')
             if self.is_hovered:
                  # 懸停動畫
-                frame_idx = min(self._hover_counter // self.hover_loops_per_frame, HOVER_FRAMES - 1)
-                self.canvas.itemconfig(self.id_hover, image=self.hover_frames[frame_idx])
-                if self._hover_counter < self.hover_loops_per_frame * HOVER_FRAMES:
+                frame_idx = min(self._hover_counter // self.hover_loops_per_frame, FOCUS_FRAME_NUM - 1)
+                self.canvas.itemconfig(self.id_hover, image=self.anim_focus[frame_idx])
+                if self._hover_counter < self.hover_loops_per_frame * FOCUS_FRAME_NUM:
                     self._hover_counter += 1
                 # 確保懸停圖層在最上層
                 self.canvas.tag_raise(self.id_hover)
@@ -262,26 +295,32 @@ class NPC:
             self.anim_attr_weak._loop_counter  = 0
             self.timer_seconds = 0
 
+            '''
             def remove_npc():
                 self.canvas.delete(self.id_walk)
                 self.canvas.delete(self.id_flash)
                 self.canvas.delete(self.id_weak)
                 self.id = None # 把NPC的id拿掉，不再更新
+            '''
+          
             # 加入愛心圖形 (顯示在 NPC 上方)
             screen_x = self.canvas.coords(self.id_walk)[0]
-            heart_cx = screen_x
-            heart_cy = self.y - 80  # 調整位置顯示在 NPC 上方
+            heart_cx = self.world_x
+            heart_cy = self.y - 100  # 調整位置顯示在 NPC 上方
             player_y = root_window.player.y
             player_h = root_window.player.anim.frames[0].height()
             player_foot_y = player_y + player_h // 2 - 35
             self.heart = HeartFillClip(
                 self.canvas,
                 heart_cx,
+                screen_x,
                 heart_cy,
-                scale=1.2,
-                target_y=player_foot_y, # 愛心填滿後，落下的目標y座標
-                on_fall_finish=remove_npc  # 愛心填滿後，把這個npc刪掉
+                scale = 1.2,
+                target_y = player_foot_y, # 愛心填滿後，落下的目標y座標
+                on_fall_finish = self.on_heart_filled  # 愛心填滿後，把這個npc刪掉
+                
             )
+            #self.canvas.addtag_withtag(self._tag, self.heart.fill_id)
             # if not self.timer_label:
             #     self.timer_label = tk.Label(root_window, text="", font=("Arial", 14), fg="white", bg="black")
             #     self.timer_label.place(x=10, y=10)
@@ -294,23 +333,53 @@ class NPC:
         self.canvas.itemconfig(self.id_weak,  state='hidden')
         self.canvas.itemconfig(self.id_walk,  state='normal')
         # 重新設置為走路動畫
-        self.anim = self.anim_walk_r if self.face_right else self.anim_walk_l
+        if not self.is_dead:
+            self.anim = self.anim_walk_r if self.face_right else self.anim_walk_l
+
 
         # 若愛心還沒填滿，刪除愛心
-        if self.heart:
-            if self.heart.fill_ratio < 1.03:
-                self.heart.stop()  
+        if self.heart and not self.is_dead:
+            if not self.heart.fall_finished:
+                self.heart.stop()
                 self.heart = None
             else:
                 # 已經填滿，讓它自然掉下來
                 pass
 
+        
+        
         # if self.timer_label:
         #     self.timer_label.destroy()
         #     self.timer_label = None
+    
+    def on_heart_filled(self):
+        print(f"NPC {self.npc_id} 的愛心填滿！進入下一段動畫")
+        self.is_attracted = False
+        # 倒地與復活動畫
+        # 清除不再需要的圖層
+        for cid in (self.id_walk, self.id_flash, self.id_weak, self.id_hover):
+            self.canvas.delete(cid)
+
+        # 清空這些變數避免後續錯用
+        self.id_walk = None
+        self.id_flash = None
+        self.id_weak = None
+        self.id_hover = None
+
+        self.anim = self.anim_died_r if self.face_right else self.anim_died_l
+        self.current_img = self.anim.frames[0]
+        self.canvas.itemconfig(self.id_died, state='normal', image=self.current_img)
+        self.is_dead = True
+        self.pose_final = False
+        '''
+        frame_idx = min(self._hover_counter // self.hover_loops_per_frame, FOCUS_FRAME_NUM - 1)
+        self.canvas.itemconfig(self.id_hover, image=self.anim_focus[frame_idx])
+        if self._hover_counter < self.hover_loops_per_frame * FOCUS_FRAME_NUM:
+            self._hover_counter += 1
+        '''
 
     def _update_timer(self, root_window):
         if self.is_attracted:
             self.timer_label.config(text=f"對話中：{self.timer_seconds} 秒")
             self.timer_seconds += 1
-            root_window.after(1000, lambda: self._update_timer(root_window))
+            root_window.after(1000, lambda: self._update_timer(root_window))#
