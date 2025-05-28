@@ -49,7 +49,7 @@ class Clock:
             angle = 360
             self.finished = True
             self.running = False  # 自動停止
-        # ✅ 更新 fill arc
+        # 更新 fill arc
         current_angle = angle - 90
         self.canvas.itemconfig(self.fill_id, extent=-angle)
         
