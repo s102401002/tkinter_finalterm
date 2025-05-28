@@ -4,16 +4,16 @@ import random
 import tkinter as tk
 from pathlib import Path
 from character import Character
-EXCLAM_FPS = 4
+EXCLAM_FPS = 8
 EXCLAM_FRAME_NUM = 4
-EXA_OFFSET = 140
+EXA_OFFSET = 120
 class NPC_GIRL(Character):
     _id_counter = 0
     def __init__(self, canvas: tk.Canvas, asset_dir: Path, start_x: int, y: int, walk_fps: int,fps: int, world_left: int, world_right: int):
         self.canvas = canvas
        # 世界座標與原點
         self.origin = world_left
-        self.max_range = int((world_right - world_left)/4) # 固定最大區間
+        self.max_range = int((world_right - world_left)/7) # 固定最大區間
         self.cur_range = random.randint(20, self.max_range) # 當前區間，初始等於最大
         self.world_x = start_x
         self.y = y
@@ -49,7 +49,7 @@ class NPC_GIRL(Character):
         # 設定初始動畫
         self.anim = self.anim_walk_r if self.face_right else self.anim_walk_l
         self.current_img = self.anim.frames[0]
-
+        self.atk_img = None
         # 先放在正確位置
         screen_x = self.world_x  # 初始沒有 bg_offset，直接 world_x
 
@@ -66,7 +66,7 @@ class NPC_GIRL(Character):
         self.id = self.id_walk
         self.walking = True
         self.shock = False
-        self.is_attack = False #是否正在發射光波
+        self.in_pk_mode = False #是否正在發射光波
         self.is_win = False
         
         # 驚嘆號動畫計數器，超出後停在最後一幀
@@ -100,33 +100,33 @@ class NPC_GIRL(Character):
             if cid is not None:
                 y = self.y - (EXA_OFFSET if cid == self.id_exclamation else 0)
                 self.canvas.coords(cid, screen_x, y)
-        # 停止模式：保持 current_img，隱藏其他
+        if self.in_pk_mode:
+            return
+        # 驚訝模式
         if self.shock:
-           
-
             # 播放驚嘆號動畫
             frame_idx = min(self.exa_counter // self.exa_loops_per_frame, EXCLAM_FRAME_NUM - 1)
             self.canvas.itemconfig(self.id_exclamation, image=self.anim_exclamation.frames[frame_idx])
 
-            if self.exa_counter < self.exa_loops_per_frame * EXCLAM_FRAME_NUM:
+            if self.exa_counter <= self.exa_loops_per_frame * EXCLAM_FRAME_NUM:
                 self.exa_counter += 1
                  # 持續顯示 notice 圖片
                 img = self.img_notice_r if self.face_right else self.img_notice_l
                 self.canvas.itemconfig(self.id_walk, state='normal', image=img)
             else:
                 # 換成攻擊圖
-                atk_img = self.img_attack_r if self.face_right else self.img_attack_l
-                self.canvas.itemconfig(self.id_walk, state='normal', image=atk_img)
+                self.canvas.itemconfig(self.id_walk, state='normal', image=self.atk_img)
                 self.canvas.itemconfig(self.id_exclamation, state='hidden')
-                self.is_attack = True
+                #self.is_attack = True
                 self.shock = False
+                self.in_pk_mode=True
             return
+        
         if self.stopping:
             self.canvas.itemconfig(self.id_walk, state='normal', image=self.current_img)
             #for cid in (self.id_exclamation, self.id_weak):
             #    self.canvas.itemconfig(cid, state='hidden')
             self.canvas.itemconfig(self.id_exclamation, state='hidden')
-
             return
         
         else:
@@ -144,6 +144,13 @@ class NPC_GIRL(Character):
         img = self.img_notice_r if self.face_right else self.img_notice_l
         self.canvas.itemconfig(self.id_walk, state='normal',image=img)
         self.canvas.itemconfig(self.id_exclamation, state='normal',image=self.anim_exclamation.frames[0])
+
+    def enter_pk_mode(self,x, bg_offset):
+        if not self.in_pk_mode:
+           screen_x = self.world_x-bg_offset
+           self.atk_img = self.img_attack_r if screen_x<=x else self.img_attack_l
+                
+
 
 
 

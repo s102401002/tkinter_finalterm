@@ -1,3 +1,12 @@
+'''待修復或未完成項目:
+1.npc和npc_girl初始投放要均勻分布分布,不可走到玩家拿不到愛心的地方
+2.npc和npc_girl的走路範圍重新設定,盡量減少交錯的情形(這個可以有空再改)
+3.pk贏的愛心掉落
+4.bar需傳入有幾個npc_girl在畫面中,決定遞減倍數
+5.bar的輸贏需callback(贏寫一半,輸完全沒開始)
+6.攻擊時的扣血量先註解掉,長按與短按扣除方法不同
+'''
+
 import tkinter as tk
 from pathlib import Path
 from PIL import Image, ImageTk
@@ -7,9 +16,13 @@ from player import Player
 from npc import NPC
 from npc_girl import NPC_GIRL
 from healthBar import HealthBar
+<<<<<<< Updated upstream
+=======
+from pk_bar_light import LaserBarRectApp
+>>>>>>> Stashed changes
 # ------------------- config -------------------
 WIDTH, HEIGHT = 900, 400
-FPS = 60
+FPS = 50
 ASSETS_DIR = Path(__file__).with_suffix('').with_name("assets_aligned")
 PLAYER_Y_ADJUST = -50
 PLAYER_LEFT_X = WIDTH * 3 // 4
@@ -24,6 +37,7 @@ WALK_SPEED = 3
 RUN_SPEED = 10
 NPC_WALK_SPEED = 2
 ATTRACT_TIME = 5 # 吸引幾秒加分
+LONGPRESS_MS = 200
 # ------------------- main game -------------------
 class ElectricEyeGame(tk.Tk):
     def __init__(self):
@@ -76,6 +90,12 @@ class ElectricEyeGame(tk.Tk):
         self.hover_npc = None # 判斷紀錄按下滑鼠時在不在npc上
         self.clicked_npc = None  # 避免 _on_mouse_move 報錯
         self.attack_npc_girl = [] #現在screen中有幾個女生要攻擊
+        self._lp_after_id = None   # long-press 計時器 after-id
+        self._outline_id  = None   # 當前 outline polygon id
+        self._longpress   = False  # 這次是否已被視為長按
+        self.in_pk_mode = False
+        self.lose_locked = False
+        self.pk_bar = None
         # ---- 主迴圈 ----
         self._loop()
 
@@ -117,42 +137,136 @@ class ElectricEyeGame(tk.Tk):
                 return
         # 按到一半時滑鼠離開原本npc位置 視為放開滑鼠 
         if self.clicked_npc and self.hover_npc != self.clicked_npc:
-            self._on_release(e)
-    def _on_click(self, event):
-        pass
+            if not self.clicked_npc.is_attracted_PK:
+                self._on_release(e)
+   
     def _on_press(self, event):
-        if self.hover_npc:
+        if self.lose_locked:
+            return
+        if self.hover_npc and not self.in_pk_mode:
             self.clicked_npc = self.hover_npc
             if self.clicked_npc.is_dead:
                 return
             self.player.attracting = True
-            self.clicked_npc.walking = False
-            
-            for girl in self.npc_girl_list:
-                screen_x = girl.world_x - self.bg_offset
-                if 0 <= screen_x <= WIDTH:
-                    girl.notice()
+            self.clicked_npc.is_focused = True
+            self.clicked_npc.stopping = True
+            #for girl in self.npc_girl_list:
+            #    screen_x = girl.world_x - self.bg_offset
+            #    if 0 <= screen_x <= WIDTH:
+            #        girl.notice()
                     #self.attack_npc_girl.append(girl.id)    
             
+            #self.clicked_npc.start_dialog(self)
+            #self.clicked_npc.update(self.bg_offset)
+            self._longpress   = False
+            
+            self._lp_after_id = self.after(LONGPRESS_MS, self._handle_long_press)
+            # 扣一小段血
+            #self.health_bar.lose_one_step()
+   
+
+    def _handle_long_press(self):
+        """滿 1 秒觸發；若滑鼠仍停留在同一隻 NPC 上就進入對話"""
+        self._lp_after_id = None
+        if not self.clicked_npc or self.clicked_npc.is_dead:
+            return
+        # 確保滑鼠仍懸停同隻 NPC
+        if self.hover_npc is None or self.hover_npc is not self.clicked_npc:
+            return
+
+        self._longpress = True
+        self.attack_npc_girl = []
+        # NPC girls notice…
+        for girl in self.npc_girl_list:
+            scr_x = girl.world_x - self.bg_offset
+            if 0 <= scr_x <= WIDTH:
+                self.attack_npc_girl.append(girl) 
+                girl.notice()
+
+        # 畫面中沒有npc_girl，長按向上填滿愛心
+        if self.attack_npc_girl :
+            if not self.in_pk_mode:
+                self.in_pk_mode = True #第一次長按觸發對戰模式
+                x=self.clicked_npc.world_x-self.bg_offset
+                y=self.clicked_npc.y
+                
+                self.pk_bar = LaserBarRectApp(self.canvas,
+                                            screen_x=x,
+                                            y=y-120,
+                                            anim_fps=10,
+                                            fps=FPS,
+                                            on_finish=self._on_pk_finished 
+                                            )
+                
+                for girl in self.attack_npc_girl:
+                    self
+                    girl.enter_pk_mode(x,self.bg_offset)
+                self.clicked_npc.enter_pk_mode()  #動畫與邏輯與start_dialog不一樣
+
+        else:
             self.clicked_npc.start_dialog(self)
             self.clicked_npc.update(self.bg_offset)
+    def _on_pk_finished(self, success: bool):
+        if self.pk_bar:
+            self.pk_bar.destroy()
+            self.pk_bar = None
+        if success:
+            print("玩家成功搶到NPC")  
+            self.clicked_npc.exit_pk_mode(player_win=True)
+            #self.player.exit_pk_mode(player_win=True)
+            #for girl in self.attack_npc_girl:
+                #girl.exit_pk_mode(girl_win=False)
+                #girl.update(self.bg_offset)
+            self.clicked_npc.update(self.bg_offset)
+            self.player.update()
+
+            #
+            #self._update_score_display()
+        else:
+            print("被其他女孩搶走了")  # 
+            self.clicked_npc.exit_pk_mode(player_win=False)
+            #self.player.exit_pk_mode(player_win=False)
+            for girl in self.attack_npc_girl:
+                #girl.exit_pk_mode(girl_win=True)
+                girl.update(self.bg_offset) # 可記錄勝利狀態
+            self.health_bar.lose_one_step()
+            self.lose_locked = True
+        self.in_pk_mode = False
+        self.clicked_npc = None
+        self.attack_npc_girl.clear()        
 
             # 扣一小段血
             self.health_bar.lose_one_step()
 
     def _on_release(self, event):
-        if self.clicked_npc:
-            self.clicked_npc.stop_dialog()
-            for girl in self.npc_girl_list:
-                if girl.shock:
-                    girl.shock = False
-                    girl.update(self.bg_offset)
-            if not self.clicked_npc.is_dead:
-                self.clicked_npc.walking = True
+        if self.lose_locked:
+            return
+        # 如果目前是 PK 模式 → 不處理任何短按或 stop_dialog
+        if self.pk_bar:
+            self.pk_bar.on_click()
+            
+        # ─── 短按：取消 long-press───
+        if not self._longpress:
+            if self._lp_after_id:
+                self.after_cancel(self._lp_after_id)
+                self._lp_after_id = None
+            if not self.in_pk_mode:
+                # 恢復玩家走路狀態            
+                self.player.attracting = False
 
-            self.player.attracting = False
-            self.clicked_npc.update(self.bg_offset)
-            self.clicked_npc = None
+        # ─── 長按：照原本 stop_dialog 流程 ───
+        else:
+            if not self.in_pk_mode:
+                self.clicked_npc.stop_dialog()
+                for girl in self.npc_girl_list:
+                    if girl.shock:
+                        girl.shock = False
+                        girl.update(self.bg_offset)
+                if not self.in_pk_mode:
+                    self.player.attracting = False
+        if not self.in_pk_mode:
+            self.clicked_npc  = None
+        self._longpress   = False
     # --------------------------------------------------------
     # 載入背景與角色貼圖
     # --------------------------------------------------------
@@ -194,14 +308,14 @@ class ElectricEyeGame(tk.Tk):
         self.npc_list = []
         
         npc_y = [HEIGHT-140, HEIGHT-160,  HEIGHT-220,  HEIGHT-240] # 後面兩項靠近牆壁
-
-        for _ in range(7):  # 例如一次隨機生成 7 個
+        
+        for ii in range(7):  # 例如一次隨機生成 7 個
             idx = random.randrange(len(npc_y))
             y = npc_y[idx]
             npc = NPC(
                 self.canvas,
                 npc_asset_dir,
-                start_x=random.randint(1000, self.bg_img.width() - 1000),
+                start_x=random.randint(1000+ii*500, 1000+(ii+1)*500),
                 y=y,
                 walk_fps=NPC_WALK_FPS,
                 fps = FPS,
@@ -213,13 +327,13 @@ class ElectricEyeGame(tk.Tk):
             self.npc_list.append(npc)
        
         self.npc_girl_list = []
-        for _ in range(4):  # 例如一次隨機生成 7 個
+        for ii in range(4):  # 例如一次隨機生成 7 個
             idx = random.randrange(len(npc_y))
             y = npc_y[idx]
             npc = NPC_GIRL(
                 self.canvas,
                 npc_asset_dir,
-                start_x=random.randint(1000, self.bg_img.width() - 1000),
+                start_x=random.randint(1000+ii*500, 1000+(ii+1)*500),
                 y=y,
                 walk_fps=NPC_WALK_FPS,
                 fps = FPS,
@@ -331,12 +445,14 @@ class ElectricEyeGame(tk.Tk):
      # hover_npc: 已由 _on_mouse_move 更新
         if (self.player.attracting) or (self.hover_npc and self.hover_npc.is_hovered):
             # player 切站立圖（需要在 Player 裡實作）
-            self.player.set_stand_image(focus_npc=self.hover_npc, mouse_x=self.mouse_x)
+            y = self.clicked_npc if self.player.attracting else self.hover_npc 
+           
+            self.player.set_stand_image(focus_npc=y , mouse_x=self.mouse_x)
 
             # update NPC
             for npc in self.npc_list:
                 npc.update(self.bg_offset)
-                if not npc.is_attracted:
+                if not npc.is_attracted_noPK and not npc.is_attracted_PK:
                     npc.move(NPC_WALK_SPEED)
 
             # update NPC_GIRL
@@ -361,7 +477,7 @@ class ElectricEyeGame(tk.Tk):
            
             for npc in self.npc_list:
                 npc.update(self.bg_offset)
-                if not npc.is_attracted:
+                if not npc.is_attracted_noPK and not npc.is_attracted_PK:
                     npc.move(NPC_WALK_SPEED)
             
             # update NPC_GIRL
@@ -408,6 +524,8 @@ class ElectricEyeGame(tk.Tk):
                 # 背景真的捲動
                 self.bg_offset = no
                 self.canvas.move('all', -d, 0) 
+                if self.pk_bar :
+                    self.canvas.move('pk_bar', d, 0) 
                 # npc也跟著背景一起動
                 for npc in self.npc_list:
                     if npc.id is None: 
@@ -460,7 +578,7 @@ class ElectricEyeGame(tk.Tk):
             if npc.id is None: 
                 continue
             npc.update(self.bg_offset)
-            if not npc.is_attracted:  # 正在對話的 NPC 不移動
+            if not npc.is_attracted_noPK and not npc.is_attracted_PK:  # 正在對話的 NPC 不移動
                 npc.move(NPC_WALK_SPEED)
         
         for girl in self.npc_girl_list:
@@ -478,7 +596,7 @@ class ElectricEyeGame(tk.Tk):
         for npc in self.npc_list:
             if npc.id is None: # npc.py->start_dialog->remove_npc方法中有npc.i=None的操作
                 continue
-            for cid in (npc.id_walk, npc.id_flash, npc.id_weak):
+            for cid in (npc.id_walk, npc.id_flash, npc.id_weak, npc.id_hover):
                 # 取 y 座標，如果還沒 create 這層就跳過
                 try:
                     _, yy = self.canvas.coords(cid)
@@ -501,6 +619,10 @@ class ElectricEyeGame(tk.Tk):
         layers.sort(key=lambda t: t[1])
         for cid, _ in layers:
             self.canvas.tag_raise(cid)
+<<<<<<< Updated upstream
+=======
+          
+>>>>>>> Stashed changes
 
     # --------------------------------------------------------
     # 主迴圈
