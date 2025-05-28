@@ -25,7 +25,7 @@ class GameLauncher(tk.Tk):
     def start_game(self):
         self.destroy()
         game = ElectricEyeGame(game_time=self.game_time.get(), npc_count=self.npc_count.get())
-        # game = ElectricEyeGame(game_time=10, npc_count=self.npc_count.get())
+        # game = ElectricEyeGame(game_time=10, npc_count=self.npc_count.get()) # for test
         game.mainloop()
 
     def open_settings(self):

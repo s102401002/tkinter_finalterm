@@ -102,6 +102,7 @@ class ElectricEyeGame(tk.Tk):
         self.lose_locked = False
         self.pk_bar = None
         # ---- 主迴圈、計時 ----
+        self.clock.update(paused=True) # 避免一開始填滿時鐘的bug-3.0
         self.clock.start()
         self._loop()
 
