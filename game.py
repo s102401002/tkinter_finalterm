@@ -13,8 +13,11 @@ import tkinter as tk
 from pathlib import Path
 from PIL import Image, ImageTk
 import random 
+import subprocess
+import sys
 from animation import Animation
 from player import Player
+from clock import Clock
 from npc import NPC
 from npc_girl import NPC_GIRL
 from healthBar import HealthBar
@@ -39,11 +42,12 @@ ATTRACT_TIME = 5 # 吸引幾秒加分
 LONGPRESS_MS = 200
 # ------------------- main game -------------------
 class ElectricEyeGame(tk.Tk):
-    def __init__(self):
+    def __init__(self, game_time=30, npc_count=7): # 由main_menu.py傳入參數
         super().__init__()
+        self.game_time = game_time
+        self.npc_count = npc_count
         self.title("電眼美女")
         self.resizable(False, False)
-        
         
         self.geometry(f"{WIDTH}x{HEIGHT + 50}")  # 設定整個視窗高度
         # ---- 畫布 ----
@@ -52,7 +56,9 @@ class ElectricEyeGame(tk.Tk):
         #第二個canvas放血條、記分板、時間
         self.ui_canvas = tk.Canvas(self, width=WIDTH, height=50, bg="#007500", highlightthickness=0)
         self.ui_canvas.place(x=0, y=0)
-        
+        # 第三個canvas放時鐘(因為會超出綠色的位置所以另外開一個canvas)
+        self.clock_canvas = tk.Canvas(self, width=50, height=50, bg="#007500", highlightthickness=0)
+        self.clock_canvas.place(x=400, y=0)
         # 暫停的相關參數
         self.paused = False
         self.pause_menu_items = []
@@ -95,7 +101,8 @@ class ElectricEyeGame(tk.Tk):
         self.in_pk_mode = False
         self.lose_locked = False
         self.pk_bar = None
-        # ---- 主迴圈 ----
+        # ---- 主迴圈、計時 ----
+        self.clock.start()
         self._loop()
 
     """
@@ -306,15 +313,19 @@ class ElectricEyeGame(tk.Tk):
         # 建立 NPC 物件
         self.npc_list = []
         
+        bg_width = self.bg_img.width()
+        margin = 500 #離走廊的邊界 避免一開始就出界
+        npc_spacing = (bg_width - 2 * margin) // self.npc_count
+
         npc_y = [HEIGHT-140, HEIGHT-160,  HEIGHT-220,  HEIGHT-240] # 後面兩項靠近牆壁
         
-        for ii in range(7):  # 例如一次隨機生成 7 個
+        for ii in range(self.npc_count):  # 一次隨機生成 7 個
             idx = random.randrange(len(npc_y))
             y = npc_y[idx]
             npc = NPC(
                 self.canvas,
                 npc_asset_dir,
-                start_x=random.randint(1000+ii*500, 1000+(ii+1)*500),
+                start_x=margin + ii * npc_spacing + random.randint(0, npc_spacing // 2),# 改成多npc均勻分布(原本只能最多七個npc 不然會超出去)
                 y=y,
                 walk_fps=NPC_WALK_FPS,
                 fps = FPS,
@@ -350,19 +361,22 @@ class ElectricEyeGame(tk.Tk):
         self.ui_canvas.tag_bind(self.pause_btn, "<Button-1>", self._toggle_pause)
         self.ui_canvas.tag_bind(self.pause_text, "<Button-1>", self._toggle_pause)
 
-        # 時鐘圓形（佔位）+ 分數文字
-        self.clock_circle = self.ui_canvas.create_oval(400, 5, 440, 45, fill="white", outline="black")
+        # 時鐘
+        self.clock = Clock(self.clock_canvas, center_x=25, center_y=25, radius=20, total_seconds=self.game_time)
+        # 分數文字
         self.score_text = self.ui_canvas.create_text(650, 25, text=f"Score: {self.score}", fill="white", font=("Arial", 24))
     def _update_score_display(self):
         self.ui_canvas.itemconfig(self.score_text, text=f"Score: {self.score}")
     def _toggle_pause(self, event=None):
         self.paused = not self.paused
         if self.paused:
+            # self.clock_canvas.config(height=HEIGHT, bg="white")
             self.ui_canvas.config(height=HEIGHT, bg="white") #暫時把ui_canva拉大 才能看到其他選項
             self._show_pause_menu()
         else:
             self._hide_pause_menu()
             self.ui_canvas.config(height=50, bg="#007500")  # 恢復原高度與樣式
+            # self.clock_canvas.config(height=50, bg="#007500")
     def _show_pause_menu(self):
         overlay = self.ui_canvas.create_rectangle(300, 100, 600, 300, fill="white", outline="black")
         text_continue = self.ui_canvas.create_text(450, 160, text="繼續遊戲", font=("Arial", 14), fill="black")
@@ -618,12 +632,21 @@ class ElectricEyeGame(tk.Tk):
         layers.sort(key=lambda t: t[1])
         for cid, _ in layers:
             self.canvas.tag_raise(cid)
-
+    def _return_to_main_menu(self):
+        self.destroy()
+        # 重新啟動 main_menu.py（需與game.py同資料夾）
+        subprocess.Popen([sys.executable, "main_menu.py"])
     # --------------------------------------------------------
     # 主迴圈
     # --------------------------------------------------------
     def _loop(self):
+        if hasattr(self, 'clock'):
+            self.clock.update(paused=self.paused) # 如果現在是暫停狀態就會停止clock
         if not self.paused:
+            # 時間結束:自動回主選單
+            if self.clock.finished:
+                self._return_to_main_menu()
+                return
             self._update()
         self.after(int(1000 / FPS), self._loop)
 
