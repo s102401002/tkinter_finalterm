@@ -1,4 +1,5 @@
 import tkinter as tk
+import tkinter.ttk as ttk
 from game import ElectricEyeGame
 
 class GameLauncher(tk.Tk):
@@ -24,6 +25,7 @@ class GameLauncher(tk.Tk):
     def start_game(self):
         self.destroy()
         game = ElectricEyeGame(game_time=self.game_time.get(), npc_count=self.npc_count.get())
+        # game = ElectricEyeGame(game_time=10, npc_count=self.npc_count.get())
         game.mainloop()
 
     def open_settings(self):
@@ -33,8 +35,10 @@ class GameLauncher(tk.Tk):
         settings.configure(bg="#fefefe")
 
         tk.Label(settings, text="遊戲時間（秒）:", bg="#fefefe", font=("Arial", 10)).pack(pady=(10, 0))
-        tk.Spinbox(settings, from_=30, to=300, textvariable=self.game_time, font=("Arial", 10)).pack()
-
+        time_choices = [60, 90, 120, 150, 180]
+        time_combo = ttk.Combobox(settings, values=time_choices, textvariable=self.game_time, state="readonly", font=("Arial", 10), width=10)
+        time_combo.set(self.game_time.get())  # 預設顯示目前值
+        time_combo.pack()
         tk.Label(settings, text="NPC 數量:", bg="#fefefe", font=("Arial", 10)).pack(pady=(10, 0))
         tk.Spinbox(settings, from_=1, to=20, textvariable=self.npc_count, font=("Arial", 10)).pack()
 

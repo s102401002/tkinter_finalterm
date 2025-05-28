@@ -49,6 +49,7 @@ class Clock:
             angle = 360
             self.finished = True
             self.running = False  # 自動停止
+            self.canvas.itemconfig(self.fill_id, extent=0) # 少了這行 在下次執行時會有一開始就填滿粉紅色的bug
         # 更新 fill arc
         current_angle = angle - 90
         self.canvas.itemconfig(self.fill_id, extent=-angle)
