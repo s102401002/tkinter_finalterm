@@ -31,7 +31,7 @@ class Clock:
             start=90, extent=0,
             fill='pink', outline='pink'
         )
-
+        self.canvas.itemconfig(self.fill_id, extent=0) # 避免一開始就填滿的bug-2.0
     def update(self, paused=False):
         if not self.running or self.finished or paused:
             self.last_time = time.time()  # 更新last_time，避免暫停後開始繼續計時
