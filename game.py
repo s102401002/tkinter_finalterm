@@ -5,6 +5,8 @@
 4.bar需傳入有幾個npc_girl在畫面中,決定遞減倍數
 5.bar的輸贏需callback(贏寫一半,輸完全沒開始)
 6.攻擊時的扣血量先註解掉,長按與短按扣除方法不同
+
+
 '''
 
 import tkinter as tk
@@ -16,10 +18,7 @@ from player import Player
 from npc import NPC
 from npc_girl import NPC_GIRL
 from healthBar import HealthBar
-<<<<<<< Updated upstream
-=======
 from pk_bar_light import LaserBarRectApp
->>>>>>> Stashed changes
 # ------------------- config -------------------
 WIDTH, HEIGHT = 900, 400
 FPS = 50
@@ -236,7 +235,7 @@ class ElectricEyeGame(tk.Tk):
         self.attack_npc_girl.clear()        
 
             # 扣一小段血
-            self.health_bar.lose_one_step()
+        self.health_bar.lose_one_step()
 
     def _on_release(self, event):
         if self.lose_locked:
@@ -619,10 +618,6 @@ class ElectricEyeGame(tk.Tk):
         layers.sort(key=lambda t: t[1])
         for cid, _ in layers:
             self.canvas.tag_raise(cid)
-<<<<<<< Updated upstream
-=======
-          
->>>>>>> Stashed changes
 
     # --------------------------------------------------------
     # 主迴圈
