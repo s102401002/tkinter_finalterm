@@ -16,12 +16,12 @@ HOVER_OFFSET_X = 30
 class NPC(Character):
     _id_counter = 0
     _instances = []      # <- 新增：所有 NPC 實例都會放在這裡 #別忘了在刪除時從 _instances 裡移除
-    def __init__(self, canvas: tk.Canvas, asset_dir: Path, start_x: int, y: int, walk_fps: int,fps: int, world_left: int, world_right: int):
+    def __init__(self, canvas: tk.Canvas, asset_dir: Path, start_x: int, y: int, walk_fps: int,fps: int, world_left: int, world_right: int, npc_num: int):
         NPC._instances.append(self) ##註冊
         self.canvas = canvas
        # 世界座標與原點
         self.origin = world_left
-        self.max_range = int((world_right - world_left)/7) # 固定最大區間(分母到時候改成有幾個npc)
+        self.max_range = int((world_right - world_left)/npc_num) # 固定最大區間(分母到時候改成有幾個npc)
         self.cur_range = random.randint(20, self.max_range)            # 當前區間，初始等於最大
         self.world_x = start_x
         self.y = y

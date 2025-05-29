@@ -218,7 +218,10 @@ class ElectricEyeGame(tk.Tk):
             self.pk_bar.destroy()
             self.pk_bar = None
         if success:
-            print("玩家成功搶到NPC")  
+            print("玩家成功搶到NPC")
+            '''
+            掉愛心
+            '''  
             self.clicked_npc.exit_pk_mode(player_win=True)
             #self.player.exit_pk_mode(player_win=True)
             #for girl in self.attack_npc_girl:
@@ -331,7 +334,8 @@ class ElectricEyeGame(tk.Tk):
                 walk_fps=NPC_WALK_FPS,
                 fps = FPS,
                 world_left=300,
-                world_right=self.bg_img.width() - 300
+                world_right=self.bg_img.width() - 300,
+                npc_num=self.npc_count
             )
             if idx == 2 or idx == 3:
                 self.canvas.tag_raise(npc.id, 'bg') #在player之下，背景之上
