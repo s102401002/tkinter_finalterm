@@ -18,13 +18,14 @@ class Clock:
         self.clock_face = self.canvas.create_oval(
             self.cx - radius, self.cy - radius,
             self.cx + radius, self.cy + radius,
-            fill="white", outline="black"
+            fill="white", 
+            outline="black"
         )
-        self.hand = self.canvas.create_line(
-            self.cx, self.cy,
-            self.cx, self.cy - radius,
-            fill="red", width=2
-        )
+        # self.hand = self.canvas.create_line(
+        #     self.cx, self.cy,
+        #     self.cx, self.cy - radius,
+        #     fill="red", width=2
+        # )
         self.fill_id = self.canvas.create_arc(
             self.cx - radius, self.cy - radius,
             self.cx + radius, self.cy + radius,
@@ -45,19 +46,19 @@ class Clock:
 
         # 限制最大角度
         angle = 360 * (self.elapsed / self.total_seconds)
-        if angle > 360:
-            angle = 360
+        if angle >= 360:
+            self.canvas.itemconfig(self.fill_id, extent=0)
             self.finished = True
-            self.running = False  # 自動停止
-            self.canvas.itemconfig(self.fill_id, extent=0) # 少了這行 在下次執行時會有一開始就填滿粉紅色的bug
-        # 更新 fill arc
+            self.running  = False
+            return 
+        
         current_angle = angle - 90
         self.canvas.itemconfig(self.fill_id, extent=-angle)
         
         rad = math.radians(current_angle)
         x = self.cx + self.radius * math.cos(rad)
         y = self.cy + self.radius * math.sin(rad)
-        self.canvas.coords(self.hand, self.cx, self.cy, x, y)
+        # self.canvas.coords(self.hand, self.cx, self.cy, x, y)
 
     def reset(self):
         self.elapsed = 0.0
@@ -65,15 +66,38 @@ class Clock:
         self.running = False
         self.finished = False
         self.prev_angle = -90
-
-        self.canvas.coords(self.hand, self.cx, self.cy, self.cx, self.cy - self.radius)
+        self.canvas.itemconfig(self.clock_face, fill='white')
+        # self.canvas.coords(self.hand, self.cx, self.cy, self.cx, self.cy - self.radius)
         self.canvas.itemconfig(self.fill_id, extent=0)
         # self.update()
-
+    def clear_fill(self):
+        # 如果有 fill_id，才去刪
+        if hasattr(self, 'fill_id') and self.fill_id is not None:
+            try:
+                self.canvas.delete(self.fill_id)
+            except tk.TclError:
+                # 若已被刪除，也不用理它
+                pass
+            finally:
+                # 刪完把引用清掉，避免下次重複刪同一個 id
+                self.fill_id = None
     def start(self):
+        # 1. 重置內部狀態
+        self.elapsed    = 0.0
+        self.prev_angle = -90
+        self.running    = True
+        self.finished   = False
+        
+        # 2. 刪除舊的 arc（有就刪）
+        self.clear_fill()
+        # 3. 重新畫一個新的 arc
+        self.fill_id = self.canvas.create_arc(
+            self.cx - self.radius, self.cy - self.radius,
+            self.cx + self.radius, self.cy + self.radius,
+            start=90, extent=0, fill='pink', outline='pink'
+        )
+        # 4. 重置時間基準
         self.last_time = time.time()
-        self.running = True
-        self.finished = False
 
 # ------------------ 測試 ------------------
 if __name__ == '__main__':

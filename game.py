@@ -42,7 +42,7 @@ ATTRACT_TIME = 5 # 吸引幾秒加分
 LONGPRESS_MS = 200
 # ------------------- main game -------------------
 class ElectricEyeGame(tk.Tk):
-    def __init__(self, game_time=30, npc_count=7): # 由main_menu.py傳入參數
+    def __init__(self, game_time=10, npc_count=7): # 由main_menu.py傳入參數
         super().__init__()
         self.game_time = game_time
         self.npc_count = npc_count
@@ -364,6 +364,7 @@ class ElectricEyeGame(tk.Tk):
 
         # 時鐘
         self.clock = Clock(self.clock_canvas, center_x=25, center_y=25, radius=20, total_seconds=self.game_time)
+        # self.clock.reset()
         # 分數文字
         self.score_text = self.ui_canvas.create_text(650, 25, text=f"Score: {self.score}", fill="white", font=("Arial", 24))
     def _update_score_display(self):
