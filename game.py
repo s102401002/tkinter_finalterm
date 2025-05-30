@@ -171,8 +171,7 @@ class ElectricEyeGame(tk.Tk):
             self._longpress   = False
             
             self._lp_after_id = self.after(LONGPRESS_MS, self._handle_long_press)
-            # 扣一小段血
-            #self.health_bar.lose_one_step()
+            
    
 
     def _handle_long_press(self):
@@ -213,9 +212,12 @@ class ElectricEyeGame(tk.Tk):
                     girl.enter_pk_mode(x,self.bg_offset)
                 self.clicked_npc.enter_pk_mode()  #動畫與邏輯與start_dialog不一樣
 
-        else:
+        else: # 非PK 呼叫update時扣血
             self.clicked_npc.start_dialog(self)
             self.clicked_npc.update(self.bg_offset)
+            # 扣一小段血
+            # self.health_bar.lose_one_step()
+            # print("扣血")
     def _on_pk_finished(self, success: bool):
         if self.pk_bar:
             self.pk_bar.destroy()
@@ -233,7 +235,7 @@ class ElectricEyeGame(tk.Tk):
             '''
             掉愛心
             '''
-            heal = 1.5 # 治癒的血量
+            heal = 2.5 # 治癒的血量
             heart = HeartFillClip.instant_create(
                 canvas         = self.canvas,
                 cx             = self.clicked_npc.world_x,
@@ -269,6 +271,8 @@ class ElectricEyeGame(tk.Tk):
             return
         # 如果目前是 PK 模式 → 不處理任何短按或 stop_dialog
         if self.pk_bar:
+            self.health_bar.lose_one_step(0.09)
+            print("PK 模式 點擊，扣血")
             self.pk_bar.on_click()
             
         # ─── 短按：取消 long-press───

@@ -33,7 +33,8 @@ class NPC(Character):
         self._end_hits = 0
         # 隨機初始方向
         self.face_right = random.choice([True, False])
-
+        # 後續需要回到game.py操作：扣血、取得現在player的位置來生愛心
+        self._root = None
          # 分配並遞增 npc_id
         self.npc_id = NPC._id_counter
         NPC._id_counter += 1
@@ -308,6 +309,7 @@ class NPC(Character):
             self._end_hits = 0
 
     def start_dialog(self, root_window):
+        self._root = root_window
         if not self.is_attracted_noPK:
             self.is_attracted_noPK = True
             # 隱藏走路、顯示特效
@@ -346,6 +348,14 @@ class NPC(Character):
                 on_fall_finish = self.on_heart_filled  # 愛心填滿後，把這個npc刪掉
                 
             )
+            # 定義一個 local 函式，扣一小段血並排下一次
+            def _drain():
+                root_window.health_bar.lose_one_step(0.08)
+                # 500 ms 後再扣
+                self._drain_id = root_window.after(500, _drain)
+
+            # 立即執行第一次
+            _drain()
             #self.canvas.addtag_withtag(self._tag, self.heart.fill_id)
             # if not self.timer_label:
             #     self.timer_label = tk.Label(root_window, text="", font=("Arial", 14), fg="white", bg="black")
@@ -371,7 +381,10 @@ class NPC(Character):
             else:
                 # 已經填滿，讓它自然掉下來
                 pass
-
+        # 如果還在扣血，就取消掉下一次排程
+        if hasattr(self, '_drain_id'):
+            self._root.after_cancel(self._drain_id)
+            del self._drain_id
         
         
         # if self.timer_label:

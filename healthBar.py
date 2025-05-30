@@ -79,11 +79,13 @@ class HealthBar:
         for i in range(self.initial_full):
             self.hearts[i].fill_ratio = 1.03
             self.hearts[i].draw()
-    def lose_one_step(self):
+    def lose_one_step(self, loss_speed=None):
+        if loss_speed == None:
+            loss_speed = self.loss_speed
         for idx, heart in reversed(list(enumerate(self.hearts))):
             if heart.fill_ratio > 0:
                 # print(f"正在扣第 {idx} 顆愛心（從左數）目前 fill_ratio={heart.fill_ratio:.2f}")
-                heart.animate_reverse_step(self.loss_speed)
+                heart.animate_reverse_step(loss_speed)
                 break
     def gain(self, increase):
         if increase == None or increase < 0:
