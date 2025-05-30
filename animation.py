@@ -1,13 +1,13 @@
 import tkinter as tk
-
+import math
 class Animation:
     """簡易動畫輪播：依主迴圈 FPS 與 cycle fps 均勻切幀"""
     def __init__(self, frames: list[tk.PhotoImage], cycle_fps: int, fps: int):
         self.frames = frames
         self.n = len(frames)
         # 每秒要播 cycle_fps 次完整循環 → 每張圖停留幾個主迴圈幀
-        loops_per_cycle = fps // cycle_fps
-        self.loops_per_frame = max(1, loops_per_cycle // self.n)
+        loops = fps / cycle_fps            # 浮點數
+        self.loops_per_frame = max(1, math.ceil(loops))
         self._loop_counter = 0
 
     def next(self) -> tk.PhotoImage:

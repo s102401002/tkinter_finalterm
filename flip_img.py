@@ -26,6 +26,6 @@ def flip_images_in_folder(input_folder: str, output_folder: str):
 
 # ✅ 使用範例
 if __name__ == "__main__":
-    src_folder = "assets_aligned\\npc\\woman\\right"       # 原始資料夾
-    dst_folder = "assets_aligned\\npc\\woman\\left"        # 儲存翻轉後圖片的資料夾
+    src_folder = "assets_aligned\\npc\\woman\\right\\fly"       # 原始資料夾
+    dst_folder = "assets_aligned\\npc\\woman\\left\\fly"        # 儲存翻轉後圖片的資料夾
     flip_images_in_folder(src_folder, dst_folder)

@@ -2,93 +2,133 @@ from PIL import Image, ImageTk
 from pathlib import Path
 from animation import Animation
 
+# 播放跌倒動畫時的目標 FPS 和總幀數
+FALL_DOWN_FPS = 12
+FALL_DOWN_FRAME_NUM = 18
+
 class Player:
-    def __init__(self, canvas, x, y, asset_dir: Path,walk_fps: int, run_fps: int, fps: int):
+    def __init__(self, canvas, x: int, y: int, asset_dir: Path,
+                 walk_fps: int, run_fps: int, fps: int):
         self.canvas = canvas
-       
-        # ---- 走路 / 跑步 貼圖 ----
-        imgs_rw = [Image.open(asset_dir / f'player/player_right_{i}.png') for i in range(7)]
-        imgs_lw = [Image.open(asset_dir / f'player/player_left_{i}.png')  for i in range(7)]
-        imgs_rr = [Image.open(asset_dir / f'player/player_right_run_{i}.png') for i in range(9)]
-        imgs_lr = [Image.open(asset_dir / f'player/player_left_run_{i}.png')  for i in range(9)]
+        # 位置與速度
+        self.x, self.y = x, y
+        self.vx = 0
 
-        self.img_foc_lb = [ImageTk.PhotoImage(Image.open(asset_dir / f'player/focusing_left_behind.png'))]
-        self.img_foc_lf = [ImageTk.PhotoImage(Image.open(asset_dir / f'player/focusing_left_front.png'))]
-        self.img_foc_rb = [ImageTk.PhotoImage(Image.open(asset_dir / f'player/focusing_right_behind.png'))]
-        self.img_foc_rf = [ImageTk.PhotoImage(Image.open(asset_dir / f'player/focusing_right_front.png'))]
+        # 載入素材
+        rw_imgs = [Image.open(asset_dir / f'player/player_right_{i}.png') for i in range(7)]
+        lw_imgs = [Image.open(asset_dir / f'player/player_left_{i}.png')  for i in range(7)]
+        rr_imgs = [Image.open(asset_dir / f'player/player_right_run_{i}.png') for i in range(9)]
+        lr_imgs = [Image.open(asset_dir / f'player/player_left_run_{i}.png')  for i in range(9)]
+        fd_l = [Image.open(asset_dir / f'player/left/lose/{i}.png')  for i in range(1, FALL_DOWN_FRAME_NUM+1)]
+        fd_r = [Image.open(asset_dir / f'player/right/lose/{i}.png') for i in range(1, FALL_DOWN_FRAME_NUM+1)]
 
-        def mk(img):                  # 統一縮放 (×1/3)
+        # 焦點圖（behind/front）
+        self.img_foc_lb = ImageTk.PhotoImage(Image.open(asset_dir / 'player/focusing_left_behind.png'))
+        self.img_foc_lf = ImageTk.PhotoImage(Image.open(asset_dir / 'player/focusing_left_front.png'))
+        self.img_foc_rb = ImageTk.PhotoImage(Image.open(asset_dir / 'player/focusing_right_behind.png'))
+        self.img_foc_rf = ImageTk.PhotoImage(Image.open(asset_dir / 'player/focusing_right_front.png'))
+
+        # 縮放函式
+        def mk(img: Image.Image, scale: int):
             return ImageTk.PhotoImage(
-                img.resize((img.width//3, img.height//3), Image.Resampling.LANCZOS)
+                img.resize((img.width//scale, img.height//scale), Image.Resampling.LANCZOS)
             )
 
-        self.anim_right_walk = Animation([mk(i) for i in imgs_rw], walk_fps, fps)
-        self.anim_left_walk  = Animation([mk(i) for i in imgs_lw], walk_fps, fps)
-        self.anim_right_run  = Animation([mk(i) for i in imgs_rr], run_fps, fps)
-        self.anim_left_run   = Animation([mk(i) for i in imgs_lr], run_fps, fps)
+        # 走路 / 跑步 / 跌倒 動畫
+        self.anim_right_walk = Animation([mk(i, 3) for i in rw_imgs], walk_fps, fps)
+        self.anim_left_walk  = Animation([mk(i, 3) for i in lw_imgs], walk_fps, fps)
+        self.anim_right_run  = Animation([mk(i, 3) for i in rr_imgs], run_fps, fps)
+        self.anim_left_run   = Animation([mk(i, 3) for i in lr_imgs], run_fps, fps)
+        self.anim_falldown_l = Animation([mk(i,1) for i in fd_l], FALL_DOWN_FPS, fps)
+        self.anim_falldown_r = Animation([mk(i,1) for i in fd_r], FALL_DOWN_FPS, fps)
 
-        self.anim = self.anim_right_walk
+        # 初始狀態
         self.face_right = True
         self.running = False
         self.hover = False
-        self.attracting = False # 是否點著npc 後面可以連接不同的圖片
+        self.attracting = False
         self.idle = False
-        self.x, self.y = x, y
-        self.vx = 0
-        self.id = canvas.create_image(x, y, image=self.anim.frames[0], tags='player')
+        self.lose_pk = False
+        self.lose_pose_final = False
+        # 使用右走動畫起始
+        self.anim = self.anim_right_walk
+        # 將首張影像繪出
+        self.current_img = self.anim.frames[0]
+        self.id = self.canvas.create_image(self.x, self.y, image=self.current_img, tags='player')
 
-    def set_direction(self, mouse_x):  ##根據滑鼠游標位置決定方向
-        new_face = (mouse_x >= self.x)
+    def set_direction(self, mouse_x: int) -> bool:
+        """根據滑鼠 x 決定面向，若方向變動回傳 True"""
+        new_face = mouse_x >= self.x
         if new_face != self.face_right:
             self.face_right = new_face
             return True
         return False
 
-    def set_speed(self, speed, running): ##根據滑鼠游標位置決定走/跑
+    def set_speed(self, speed: int, running: bool):
+        """根據 speed 與 running 切換對應動畫"""
         self.vx = speed if self.face_right else -speed
         self.running = running
         if self.face_right:
-            self.anim = self.anim_right_run if self.running else self.anim_right_walk
+            self.anim = self.anim_right_run if running else self.anim_right_walk
         else:
-            self.anim = self.anim_left_run if self.running else self.anim_left_walk
+            self.anim = self.anim_left_run if running else self.anim_left_walk
 
     def update(self):
+        """每幀更新位置與動畫，含跌倒、hover、idle 邏輯"""
+        # 更新實際座標
         self.canvas.coords(self.id, self.x, self.y)
+
+        # 跌倒模式優先
+        if self.lose_pk:
+            total = self.anim.loops_per_frame * self.anim.n
+            if self.anim._loop_counter < total:
+                img = self.anim.next()
+            else:
+                img = self.anim.frames[-1]
+                self.lose_pk = False
+                self.lose_pose_final = True
+            self.canvas.itemconfig(self.id, image=img)
+            return
+
+        # 靜止情況：hover、idle、attracting
         if self.hover or self.idle or self.attracting:
             img = self.anim.frames[0]
         else:
             img = self.anim.next()
+
         self.canvas.itemconfig(self.id, image=img)
 
-   
-    def set_stand_image(self, focus_npc=None, mouse_x=None):
-        """
-        focus_npc: 如果傳入 NPC，就比對 y 值決定用 lb(在後) or lf(在前)；
-        否則用預設 stand_frame。
-        """
-        if self.y < focus_npc.y:
-            if self.x >= mouse_x:
-                img = self.img_foc_rf
+    def set_stand_image(self, focus_npc=None, mouse_x: int=None):
+        """滑鼠在 NPC 上時，用對應焦點圖顯示"""
+        if focus_npc is not None:
+            if self.y < focus_npc.y:
+                img = self.img_foc_rf if self.x >= mouse_x else self.img_foc_lf
             else:
-                img = self.img_foc_lf
+                img = self.img_foc_rb if self.x >= mouse_x else self.img_foc_lb
         else:
-            if self.x >= mouse_x:
-                img = self.img_foc_rb
-            else:
-                img = self.img_foc_lb
-
-
+            img = self.current_img
         self.canvas.itemconfig(self.id, image=img)
 
     def resume_move(self):
-        """當沒有 hover 或吸引時，恢復走路或跑步的動畫和速度"""
+        """跳出 hover/attract 模式後，恢復先前走/跑動畫"""
         self.idle = False
-        # 依照先前設定的 vx/self.running 重新設定 anim
         if self.vx == 0:
-            self.set_stand_image()  # 或許直接站著也可
+            self.set_stand_image()
         else:
-            # 例如：
+            # 依目前速度/方向重新設定 anim
             if self.running:
-                self.anim = self.anim_run_r if self.face_right else self.anim_run_l
+                self.anim = self.anim_right_run if self.face_right else self.anim_left_run
             else:
-                self.anim = self.anim_walk_r if self.face_right else self.anim_walk_l
+                self.anim = self.anim_right_walk if self.face_right else self.anim_left_walk
+
+    def lose_pk_mode(self):
+        """進入跌倒動作，重設計數器"""
+        self.lose_pk = True
+        self.lose_pose_final = False
+        # 切換對應跌倒動畫
+        self.anim = self.anim_falldown_r if self.face_right else self.anim_falldown_l
+        # 重設動畫計數
+        self.anim._loop_counter = 0
+        # 顯示第一張
+        img = self.anim.frames[0]
+        self.canvas.itemconfig(self.id, image=img)
