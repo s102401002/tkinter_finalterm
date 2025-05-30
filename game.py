@@ -695,6 +695,9 @@ class ElectricEyeGame(tk.Tk):
     # 主迴圈
     # --------------------------------------------------------
     def _loop(self):
+        if self.health_bar.is_empty() == True:
+            self._return_to_main_menu()
+            return
         if hasattr(self, 'clock'):
             self.clock.update(paused=self.paused) # 如果現在是暫停狀態就會停止clock
         if not self.paused:
