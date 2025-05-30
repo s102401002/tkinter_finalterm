@@ -3,13 +3,14 @@ import math
 import time
 
 class HeartFillClip:
-    def __init__(self, canvas, cx, screen_x, cy, scale, target_y = 280, on_fall_finish=None):
+    def __init__(self, canvas, cx, screen_x, cy, scale, target_y = 280, on_fall_finish=None,heal_amount=1.0):
         self.canvas = canvas
         self.world_x = cx  # 記錄真實世界座標
         self.bg_offset = cx-screen_x
         self.screen_x = screen_x  # 初始時等於畫面座標
         self.cy = cy
         self.scale = scale
+        self.heal_amount=heal_amount
         self.steps = 100
         self.fill_ratio = 0.0  # 從 0.0 到 1.0
         self.if_startfall = False
@@ -150,7 +151,7 @@ class HeartFillClip:
         flat = [c for xy in pts for c in xy]
         self.canvas.coords(self.fill_id, *flat)
     @classmethod
-    def instant_filled(cls, canvas, cx, screen_x, cy, scale, target_y=280, on_fall_finish=None):
+    def instant_create(cls, canvas, cx, screen_x, cy, scale, target_y=280, on_fall_finish=None,heal_amount=1.0):
         """產生一顆立即填滿、直接掉落的愛心"""
         heart = cls.__new__(cls)  # 跳過 __init__
         heart.canvas = canvas
@@ -161,19 +162,20 @@ class HeartFillClip:
         heart.scale = scale
         heart.target_y = target_y
         heart.on_fall_finish = on_fall_finish
+        heart.heal_amount = heal_amount # 吃到愛心後的治癒量
         heart.fill_id = None
         heart.outline_id = None
         heart.fall_finished = False
         heart.if_startfall = True
         heart.steps = 30
         heart.outline_points = heart.compute_heart_points()
-
+        
         # 直接畫出完整填滿的心形
         heart.fill_id = heart.canvas.create_polygon(
             heart.outline_points,
             fill="red",
             outline="",
-            tags='filled_heart'
+            tags='heart'
         )
 
         # 立即啟動掉落
@@ -191,5 +193,5 @@ if __name__ == '__main__':
     canvas.pack()
 
     # HeartFillClip(canvas, cx=250, cy=280, scale=5)
-    HeartFillClip.instant_filled(canvas, cx=250,screen_x=100, cy=280, scale=5)
+    HeartFillClip.instant_create(canvas, cx=250,screen_x=100, cy=280, scale=5)
     root.mainloop()

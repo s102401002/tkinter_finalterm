@@ -254,7 +254,7 @@ class NPC(Character):
             for cid in (self.id_flash, self.id_weak):
                 self.canvas.itemconfig(cid, state='hidden')
             if self.is_hovered:
-                 # 懸停動畫
+                # 懸停動畫
                 frame_idx = min(self._hover_counter // self.hover_loops_per_frame, FOCUS_FRAME_NUM - 1)
                 self.canvas.itemconfig(self.id_hover, image=self.anim_focus[frame_idx])
                 if self._hover_counter <= self.hover_loops_per_frame * FOCUS_FRAME_NUM:

@@ -22,6 +22,7 @@ from npc import NPC
 from npc_girl import NPC_GIRL
 from healthBar import HealthBar
 from pk_bar_light import LaserBarRectApp
+from heart import HeartFillClip
 # ------------------- config -------------------
 WIDTH, HEIGHT = 900, 400
 FPS = 50
@@ -77,6 +78,8 @@ class ElectricEyeGame(tk.Tk):
         self.switch_dx_scr  = 0
         self.switch_world_x = 0
 
+        # 存PK後掉落的愛心，一般吸引的愛心綁在npc裡
+        self.hearts = {}
         #目前吃了幾個愛心
         self.score = 0
 
@@ -219,9 +222,7 @@ class ElectricEyeGame(tk.Tk):
             self.pk_bar = None
         if success:
             print("玩家成功搶到NPC")
-            '''
-            掉愛心
-            '''  
+            
             self.clicked_npc.exit_pk_mode(player_win=True)
             #self.player.exit_pk_mode(player_win=True)
             #for girl in self.attack_npc_girl:
@@ -229,7 +230,22 @@ class ElectricEyeGame(tk.Tk):
                 #girl.update(self.bg_offset)
             self.clicked_npc.update(self.bg_offset)
             self.player.update()
-
+            '''
+            掉愛心
+            '''
+            heal = 1.5 # 治癒的血量
+            heart = HeartFillClip.instant_create(
+                canvas         = self.canvas,
+                cx             = self.clicked_npc.world_x,
+                screen_x       = self.clicked_npc.world_x - self.bg_offset,
+                cy             = self.clicked_npc.y,
+                scale          = 1.0,
+                target_y       = HEIGHT - 120,
+                on_fall_finish = None,
+                heal_amount    = heal
+            )
+            self.hearts[heart.fill_id] = heart
+            # print(self.hearts)
             #
             #self._update_score_display()
         else:
@@ -424,25 +440,45 @@ class ElectricEyeGame(tk.Tk):
         pw = self.player.anim.frames[0].width()
         ph = self.player.anim.frames[0].height()
 
+        # 收集要更新的 heart
+        hearts = []
+        # 1. 取出 npc_list 上綁的 hearts
         for npc in self.npc_list:
-            heart = npc.heart
-            if heart and heart.fill_id and heart.fall_finished:
-                coords = self.canvas.coords(heart.fill_id)
-                if not coords:
-                    continue
-                xs = coords[::2]
-                ys = coords[1::2]
-                hx = sum(xs) / len(xs)
-                hy = sum(ys) / len(ys)
+            if getattr(npc, 'heart', None):
+                hearts.append(npc.heart)
 
-                if abs(hx - px) < pw // 2 and abs(hy - py) < ph // 2:
-                    self.canvas.delete(heart.fill_id)
-                    npc.heart = None
-                    
-                    self.score += 1
-                    self._update_score_display()# 更新記分板
+        # 2. 再把 self.hearts dict 裡管理的 hearts 一起加進來
+        # 把 self.hearts 裡的也包成一樣格式
+        hearts.extend(self.hearts.values())
 
-                    self.health_bar.gain(1)  # 吃到愛心補一顆
+        # 3. 統一做碰撞檢測
+        for heart in hearts:
+            if not (heart.fill_id and heart.fall_finished):
+                continue
+
+            coords = self.canvas.coords(heart.fill_id)
+            if not coords:
+                continue
+            xs, ys = coords[::2], coords[1::2]
+            hx = sum(xs) / len(xs)
+            hy = sum(ys) / len(ys)
+
+            if abs(hx - px) < pw // 2 and abs(hy - py) < ph // 2:
+                # 3. 碰撞成功：刪圖、清參考、補血、計分
+                self.canvas.delete(heart.fill_id)
+
+                # 如果這顆心是綁在某個 npc 上，清掉那個參考
+                for npc in self.npc_list:
+                    if getattr(npc, 'heart', None) is heart:
+                        npc.heart = None
+                # 如果你有用 self.hearts dict，也把它 pop 出來
+                self.hearts.pop(heart.fill_id, None)
+
+                # 分數與補血
+                self.score += 1
+                self._update_score_display()
+                self.health_bar.gain(heart.heal_amount)
+                # print("eat"+ str(heart.heal_amount))
 
 
     # --------------------------------------------------------
@@ -452,11 +488,20 @@ class ElectricEyeGame(tk.Tk):
         # =====================================================
         # 0. 表示愛心已填滿，玩家可以開始移動，要同步更新愛心位置     
         # =====================================================
+        # 收集要更新的 heart
+        hearts = []
+        # 1. 取出 npc_list 上綁的 hearts
         for npc in self.npc_list:
-            h = getattr(npc, 'heart', None)
-            if h:  
-                if h.fall_finished or h.if_startfall:  
-                    h.update(self.bg_offset)
+            if getattr(npc, 'heart', None):
+                hearts.append(npc.heart)
+
+        # 2. 再把 self.hearts dict 裡管理的 hearts 一起加進來
+        hearts.extend(self.hearts.values())
+        # print(hearts)
+        # 統一更新
+        for h in hearts:
+            if h.fall_finished or h.if_startfall:
+                h.update(self.bg_offset)
         
      # =====================================================
      # 1. 如果滑鼠懸停在 NPC 上，或是在吸引模式，先讓玩家站立不動，然後只更新 NPC
