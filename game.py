@@ -287,6 +287,9 @@ class ElectricEyeGame(tk.Tk):
                     #girl.update(self.bg_offset)
                 #self.dead_npc.update(self.bg_offset)
                 #self.player.update()
+
+                #--通知player又有一隻npc死了--
+                self.player.add_dead_npc()
                 self.attack_npc_girl.clear()
                 '''Add commentMore actions
                 掉愛心
@@ -415,7 +418,8 @@ class ElectricEyeGame(tk.Tk):
                 fps = FPS,
                 world_left=300,
                 world_right=self.bg_img.width() - 300,
-                npc_num=self.npc_count
+                npc_num=self.npc_count,
+                player=self.player #新增 為了跟在後面的死npc
             )
             if idx == 2 or idx == 3:
                 self.canvas.tag_raise(npc.id, 'bg') #在player之下，背景之上

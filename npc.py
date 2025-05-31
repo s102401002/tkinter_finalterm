@@ -17,7 +17,7 @@ HOVER_OFFSET_X = 30
 class NPC(Character):
     _id_counter = 0
     _instances = []      # <- 新增：所有 NPC 實例都會放在這裡 #別忘了在刪除時從 _instances 裡移除
-    def __init__(self, canvas: tk.Canvas, asset_dir: Path, start_x: int, y: int, walk_fps: int,fps: int, world_left: int, world_right: int, npc_num: int):
+    def __init__(self, canvas: tk.Canvas, asset_dir: Path, start_x: int, y: int, walk_fps: int,fps: int, world_left: int, world_right: int, npc_num: int, player):
         NPC._instances.append(self) ##註冊
         self.canvas = canvas
        # 世界座標與原點
@@ -39,7 +39,8 @@ class NPC(Character):
          # 分配並遞增 npc_id
         self.npc_id = NPC._id_counter
         NPC._id_counter += 1
-
+        #死掉的時候需要跟player通知
+        self.player = player
         # 載入圖片
         self.anim_walk_r = self._load_animation(asset_dir / 'man/right/walk', walk_fps, fps, 13,3)
         self.anim_walk_l = self._load_animation(asset_dir / 'man/left/walk', walk_fps, fps, 13,3)
@@ -384,6 +385,11 @@ class NPC(Character):
         self.is_dead = True
         self._died_counter = 0
         self.pose_final = False
+        
+        # 通知player有一個npc死掉了
+        if self.player is not None:
+            self.player.add_dead_npc()
+
         '''
         frame_idx = min(self._hover_counter // self.hover_loops_per_frame, FOCUS_FRAME_NUM - 1)
         self.canvas.itemconfig(self.id_hover, image=self.anim_focus[frame_idx])
