@@ -49,6 +49,8 @@ ATTRACT_TIME = 5 # 吸引幾秒加分
 LONGPRESS_MS = 200
 EYE_OFFSET_Y = 65
 EYE_OFFSET_X = 5
+NORMAL_HEART_HEAL = 1.0
+BIG_HEART_HEAL = 1.5
 # ------------------- main game -------------------
 class ElectricEyeGame(tk.Tk):
     def __init__(self, game_time=60, npc_count=7): # 由main_menu.py傳入參數
@@ -71,7 +73,9 @@ class ElectricEyeGame(tk.Tk):
         # 暫停的相關參數
         self.paused = False
         self.pause_menu_items = []
-
+        # 結算模式（settlement mode）相關屬性
+        self.in_settlement = False
+        self.scored_npc_ids = set()  # 用於記錄已跳過 +1000 分的 dead NPC image id
 
         # ---- 狀態變數 ----
         self.mouse_x = PLAYER_CENTER_X
@@ -296,7 +300,7 @@ class ElectricEyeGame(tk.Tk):
                 '''Add commentMore actions
                 掉愛心
                 '''
-                heal = 1.5 # 治癒的血量
+                heal = BIG_HEART_HEAL # 治癒的血量
                 heart = HeartFillClip.instant_create(
                     canvas         = self.canvas,
                     cx             = self.clicked_npc.world_x,
@@ -336,6 +340,8 @@ class ElectricEyeGame(tk.Tk):
         if self.pk_bar:
             self.pk_bar.on_click()
             self.health_bar.lose_one_step(0.05)
+            #點一次加3分
+            self._update_score_display(add=3)
             
         # ─── 短按：取消 long-press───
         if not self._longpress:
@@ -457,7 +463,8 @@ class ElectricEyeGame(tk.Tk):
         # self.clock.reset()
         # 分數文字
         self.score_text = self.ui_canvas.create_text(650, 25, text=f"Score: {self.score}", fill="white", font=("Arial", 24))
-    def _update_score_display(self):
+    def _update_score_display(self, add=0):
+        self.score += add
         self.ui_canvas.itemconfig(self.score_text, text=f"Score: {self.score}")
     def _toggle_pause(self, event=None):
         self.paused = not self.paused
@@ -547,9 +554,10 @@ class ElectricEyeGame(tk.Tk):
                 self.hearts.pop(heart.fill_id, None)
 
                 # 分數與補血
-                self.score += 1
-                self._update_score_display()
+                
                 self.health_bar.gain(heart.heal_amount)
+                score_add = 1500 if heart.heal_amount == BIG_HEART_HEAL else 500
+                self._update_score_display(add=score_add)
                 # print("eat"+ str(heart.heal_amount))
     def _update_npcs(self):
         # update NPC

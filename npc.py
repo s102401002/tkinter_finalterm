@@ -198,7 +198,7 @@ class NPC(Character):
             self.heart.update(bg_offset)
         screen_x = self.world_x - bg_offset
         if self.is_dead:
-            self.canvas.coords(self.id_died, screen_x, self.y)
+            # self.canvas.coords(self.id_died, screen_x, self.y)
             if not self.pose_final:
                 # 用 Animation._loop_counter 判斷
                 total = self.anim.loops_per_frame * self.anim.n   # 播完整套需要的 update 次數
@@ -213,7 +213,7 @@ class NPC(Character):
                    self.canvas.delete(self.id_died)
                    self.id_died = None
                 return
-            
+
             # 如果不追隨玩家，就繼續保持在原地顯示最後一張倒地圖
             self.canvas.coords(self.id_died, screen_x, self.y)
             return
@@ -338,6 +338,8 @@ class NPC(Character):
             self._root = root_window
             def _drain():
                 root_window.health_bar.lose_one_step(0.05)
+                #每500ms加1分
+                root_window._update_score_display(add=1)
                 # 500 ms 後再扣
                 self._drain_id = root_window.after(500, _drain)
 
