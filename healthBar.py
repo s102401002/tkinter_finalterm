@@ -74,9 +74,7 @@ class HealthBar:
             h = Heart(canvas, cx, y, scale=0.8)
             self.hearts.append(h)
         self._draw_initial()
-    def is_empty(self):
-        """如果所有愛心都已扣光，回傳 True"""
-        return all(h.fill_ratio <= 0 for h in self.hearts)
+
     def _draw_initial(self):
         for i in range(self.initial_full):
             self.hearts[i].fill_ratio = 1.03
@@ -160,5 +158,4 @@ if __name__ == "__main__":
     tk.Button(frame, text="補 N 顆", command=gain_n).pack(side="left", padx=5)
 
     root.mainloop()
-
 

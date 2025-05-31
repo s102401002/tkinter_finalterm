@@ -2,13 +2,14 @@ from animation import Animation
 from PIL import Image, ImageTk
 import random
 import tkinter as tk
+import math
 from pathlib import Path
 from heart import HeartFillClip
 from character import Character
-FLASH_FPS = 4
-WEAK_FPS = 2
-DIED_FPS = 1
-HOVER_FPS = 8  # 每秒顯示懸停動畫的幀率
+FLASH_FPS = 16
+WEAK_FPS = 8
+DIED_FPS = 4
+HOVER_FPS = 12  # 每秒顯示懸停動畫的幀率
 FOCUS_FRAME_NUM = 3  # 懸停動畫的總幀數
 DIED_FRAME_NUM = 7
 HOVER_OFFSET = 70  # 懸停動畫相對於 NPC 的垂直偏移量
@@ -21,10 +22,11 @@ class NPC(Character):
         self.canvas = canvas
        # 世界座標與原點
         self.origin = world_left
-        self.max_range = int((world_right - world_left)/npc_num) # 固定最大區間(分母到時候改成有幾個npc)
+        self.max_range = int((world_right - world_left)/(npc_num+2)) # 固定最大區間(分母到時候改成有幾個npc)
         self.cur_range = random.randint(20, self.max_range)            # 當前區間，初始等於最大
         self.world_x = start_x
         self.y = y
+        self._root = None # 
         # 動態邊界
         self.bdr_left = self.world_x - self.cur_range
         self.bdr_right = self.world_x + self.cur_range
@@ -33,8 +35,7 @@ class NPC(Character):
         self._end_hits = 0
         # 隨機初始方向
         self.face_right = random.choice([True, False])
-        # 後續需要回到game.py操作：扣血、取得現在player的位置來生愛心
-        self._root = None
+
          # 分配並遞增 npc_id
         self.npc_id = NPC._id_counter
         NPC._id_counter += 1
@@ -67,13 +68,17 @@ class NPC(Character):
             ) for img in img_focus
         ]
 
-        # 計算每幀在主迴圈中持續的次數  
-        self.hover_loops_per_frame = max(1, (fps // HOVER_FPS) // FOCUS_FRAME_NUM)
-        self.died_loops_per_frame = max(1, (fps // DIED_FPS) // DIED_FRAME_NUM)
-        # 懸停動畫計數器，超出後停在最後一幀
-        self._hover_counter = self.hover_loops_per_frame * FOCUS_FRAME_NUM
-        self._died_counter = self.hover_loops_per_frame * DIED_FRAME_NUM
+          # 懸停動畫：每秒 HOVER_FPS 幀，整套 FOCUS_FRAME_NUM 張
+        
+        hover_loops = fps / HOVER_FPS
+        self.hover_loops_per_frame = max(1, math.ceil(hover_loops / FOCUS_FRAME_NUM))
+        self._hover_counter  = 0
 
+            # 倒地動畫：每秒 DIED_FPS 幀，整套 DIED_FRAME_NUM 張
+        
+        died_loops = fps / DIED_FPS
+        self.died_loops_per_frame = max(1, math.ceil(died_loops / DIED_FRAME_NUM))
+        self._died_counter   = 0
         # 設定初始動畫
         self.anim = self.anim_walk_r if self.face_right else self.anim_walk_l
         self.current_img = self.anim.frames[0]
@@ -133,12 +138,7 @@ class NPC(Character):
         for cid in (self.id_walk, self.id_flash, self.id_weak, self.id_hover):
             self.canvas.addtag_withtag(self._tag, cid)
 
-        # 綁事件：滑鼠移入／移出
-        self.canvas.tag_bind(self._tag, "<Enter>",
-                             lambda e, npc=self: npc._on_hover_enter())
-        self.canvas.tag_bind(self._tag, "<Leave>",
-                             lambda e, npc=self: npc._on_hover_leave())
-
+      
     def _on_hover_enter(self):
         if any(n.is_attracted_noPK or n.is_hovered or n.is_attracted_PK  for n in NPC._instances):
             return
@@ -186,29 +186,7 @@ class NPC(Character):
             self._handle_boundary_hit(left=False)
         else:
             self.world_x = nxt
-    '''
-    def move(self, speed: int):
-        dx = speed if self.face_right else -speed ## 速度：每frame位移量與方向 (右正左負)
-        next_world_x = self.world_x + dx
-
-        # 檢查「下一個位置」是否超出世界邊界
-        if next_world_x <= self.world_left: ##碰到左邊界
-            self.world_x = self.world_left
-            self.face_right = True  ##掉頭
-            self.anim = self.anim_walk_r
-            self.anim._loop_counter = 0
-        elif next_world_x >= self.world_right:  ##碰到右邊界
-            self.world_x = self.world_right
-            self.face_right = False
-            self.anim = self.anim_walk_l
-            self.anim._loop_counter = 0
-        else:
-            # 沒撞牆 → 正常移動
-            self.world_x = next_world_x
-
-        # print(f"[move] face_right={self.face_right}, dx={dx}, world_x={self.world_x}")
-    '''
-    
+   
 
 
 
@@ -219,10 +197,9 @@ class NPC(Character):
         if self.is_dead:
             self.canvas.coords(self.id_died, screen_x, self.y)
             if not self.pose_final:
-                frame_idx = min(self._died_counter // self.died_loops_per_frame,DIED_FRAME_NUM - 1)
-                if self._died_counter <= self.died_loops_per_frame * DIED_FRAME_NUM:
-                    #print(f"{self._died_counter}")
-                    self._died_counter += 1
+                # 用 Animation._loop_counter 判斷
+                total = self.anim.loops_per_frame * self.anim.n   # 播完整套需要的 update 次數
+                if self.anim._loop_counter < total:
                     self.current_img = self.anim.next()
                     self.canvas.itemconfig(self.id_died,state='normal', image=self.current_img)
                 else:
@@ -309,7 +286,6 @@ class NPC(Character):
             self._end_hits = 0
 
     def start_dialog(self, root_window):
-        self._root = root_window
         if not self.is_attracted_noPK:
             self.is_attracted_noPK = True
             # 隱藏走路、顯示特效
@@ -343,14 +319,13 @@ class NPC(Character):
                 heart_cx,
                 screen_x,
                 heart_cy,
-                scale = 1.2,
+                scale = 1.5,
                 target_y = player_foot_y, # 愛心填滿後，落下的目標y座標
                 on_fall_finish = self.on_heart_filled  # 愛心填滿後，把這個npc刪掉
-                
             )
-            # 定義一個 local 函式，扣一小段血並排下一次
+            self._root = root_window
             def _drain():
-                root_window.health_bar.lose_one_step(0.08)
+                root_window.health_bar.lose_one_step(0.15)
                 # 500 ms 後再扣
                 self._drain_id = root_window.after(500, _drain)
 
@@ -372,7 +347,6 @@ class NPC(Character):
         if not self.is_dead:
             self.anim = self.anim_walk_r if self.face_right else self.anim_walk_l
 
-
         # 若愛心還沒填滿，刪除愛心
         if self.heart and not self.is_dead:
             if not self.heart.fall_finished:
@@ -381,11 +355,11 @@ class NPC(Character):
             else:
                 # 已經填滿，讓它自然掉下來
                 pass
-        # 如果還在扣血，就取消掉下一次排程
+
+        # 如果還在扣血，就取消掉下一次排程        
         if hasattr(self, '_drain_id'):
             self._root.after_cancel(self._drain_id)
             del self._drain_id
-        
         
         # if self.timer_label:
         #     self.timer_label.destroy()
@@ -408,6 +382,7 @@ class NPC(Character):
         self.current_img = self.anim.frames[0]
         self.canvas.itemconfig(self.id_died, state='normal', image=self.current_img)
         self.is_dead = True
+        self._died_counter = 0
         self.pose_final = False
         '''
         frame_idx = min(self._hover_counter // self.hover_loops_per_frame, FOCUS_FRAME_NUM - 1)
@@ -437,11 +412,11 @@ class NPC(Character):
         self.id_weak = None
         self.id_hover = None
         self.anim = self.anim_died_r if self.face_right else self.anim_died_l
+        self.anim._loop_counter = 0          # ← 一定要重設
         self.current_img = self.anim.frames[0]
         self.canvas.itemconfig(self.id_died, state='normal', image=self.current_img)
         self.is_dead = True
         self.pose_final = False
-        #if playe_win:
 
 
     def _update_timer(self, root_window):
