@@ -18,6 +18,7 @@ from PIL import Image, ImageTk
 import random 
 import subprocess
 import sys
+import time
 from animation import Animation
 from player import Player
 from clock import Clock
@@ -53,7 +54,7 @@ NORMAL_HEART_HEAL = 1.0
 BIG_HEART_HEAL = 1.5
 # ------------------- main game -------------------
 class ElectricEyeGame(tk.Tk):
-    def __init__(self, game_time=60, npc_count=7): # 由main_menu.py傳入參數
+    def __init__(self, game_time=20, npc_count=7): # 由main_menu.py傳入參數
         super().__init__()
         self.game_time = game_time
         self.npc_count = npc_count
@@ -763,26 +764,177 @@ class ElectricEyeGame(tk.Tk):
         layers.sort(key=lambda t: t[1])
         for cid, _ in layers:
             self.canvas.tag_raise(cid)
+    def start_settlement(self):
+        """
+        啟動結算流程：讓 player 及其身後的 dead NPC 開始往右跑，
+        並準備一個 set 來記錄哪些 dead NPC 已經跳過 +1000 分數。
+        """
+        self.in_settlement = True
+        # ----------------------------------------------------
+        # (A) 把所有「活著的 NPC」從畫布移除
+        # ----------------------------------------------------
+        for npc in self.npc_list:
+            try:
+                self.canvas.delete(npc.id)
+            except:
+                pass
+        # ----------------------------------------------------
+        # (B) 把所有「光束 (beams)」從畫布移除
+        # ----------------------------------------------------
+        for beam in self.beams:
+            try:
+                self.canvas.delete(beam.id)
+            except:
+                pass
+        self.beams.clear()
+        # 讓玩家面向右、改用「走路速度」
+        self.player.face_right = True
+        self.player.vx = WALK_SPEED    # 由 RUN_SPEED 改成 WALK_SPEED
+        #把player移到左邊 開始動畫
+        self.player.x = 150
+        self.player.update()
+        # 改用「走路動畫」，讓結算看起來更一致
+        self.player.anim = (
+            self.player.anim_right_walk if self.player.face_right
+            else self.player.anim_left_walk
+        )
+
+        # 重置計分用資料結構
+        self.scored_npc_ids.clear()
+
+        # 停用所有滑鼠互動
+        self.canvas.unbind("<Motion>")
+        self.canvas.unbind("<ButtonPress-1>")
+        self.canvas.unbind("<ButtonRelease-1>")
+
+        # （選）可整個背景暫停不動或直接靜止
+        # 不要再捲動背景了，所以不動 background
+        # 你可以讓 bg_offset 固定住，或直接不在 settlement 中執行 _update() 的背景邏輯
+        # 於是，在 settlement_update() 只移動 player 與 dead NPC
+    def animate_score_text(self, text_id, steps=20, dy=2, fade_step=5):
+        """
+        讓剛出現的「+1000」文字在 steps 幀內往上移動 dy 像素，
+        然後逐步變淡，最後刪掉。
+        """
+        def _step(count):
+            if count <= 0:
+                try:
+                    self.canvas.delete(text_id)
+                except:
+                    pass
+                return
+            self.canvas.move(text_id, 0, -dy)
+            if count < fade_step:
+                if count <= fade_step // 2:
+                    self.canvas.itemconfig(text_id, fill="#888888")
+                else:
+                    self.canvas.itemconfig(text_id, fill="#CCCCCC")
+            self.after(int(1000 / FPS), lambda: _step(count - 1))
+
+        _step(steps)
+    def settlement_update(self):
+        """
+        結算模式每幀更新：
+        1. 先讓 player 往右移動並更新畫布座標。
+        2. 再依序把每隻 dead NPC 平移同樣的像素，然後檢查是否觸發 +1000、是否要刪除。
+        3. 如果還有死 NPC，下一幀繼續；如果都跑完了，就等 5 秒後回主選單。
+        """
+
+        # --------------------------------------
+        # （一）1) 移動 player
+        # --------------------------------------
+        self.player.x += self.player.vx
+        self.player.update()  # 把 player.id 更新到 (self.player.x, self.player.y)
+
+        # --------------------------------------
+        # （二）2) 移動死掉的 NPC 並檢查跳分/刪除
+        # --------------------------------------
+        to_remove = []
+        # 避免刪除跳號
+        for dead_id in list(self.player.dead_npc_ids):
+            # 先把 dead NPC 移動
+            self.canvas.move(dead_id, self.player.vx, 0)
+
+            coords = self.canvas.coords(dead_id)
+            if not coords:
+                continue
+            dead_x, dead_y = coords
+
+            # (a) 如果還沒跳過 +1000，且 dead_x >= WIDTH - 350，就觸發 +1000
+            if dead_id not in self.scored_npc_ids and dead_x >= WIDTH - 350:
+                text_id = self.canvas.create_text(
+                    dead_x, dead_y - 50,
+                    text="+1000",
+                    fill="yellow",
+                    font=("Arial", 18, "bold")
+                )
+                # 跳分動畫、加分
+                self.animate_score_text(text_id)
+                self._update_score_display(add=1000)
+                self.scored_npc_ids.add(dead_id)
+
+            # (b) 如果 dead NPC 已經完全跑出畫面右側 (dead_x > WIDTH + 150)，才加入待刪
+            if dead_x > WIDTH + 150:
+                to_remove.append(dead_id)
+
+        # 將所有跑出畫面的 dead NPC 從列表與畫布刪除
+        for dead_id in to_remove:
+            if dead_id in self.player.dead_npc_ids:
+                self.player.dead_npc_ids.remove(dead_id)
+            try:
+                self.canvas.delete(dead_id)
+            except:
+                pass
+
+        # --------------------------------------
+        # （三）3) 更新 player 動畫幀
+        # --------------------------------------
+        img = self.player.anim.next()
+        self.canvas.itemconfig(self.player.id, image=img)
+
+        # --------------------------------------
+        # （四）4) 檢查是否所有 dead NPC 都跑完
+        # --------------------------------------
+        if not self.player.dead_npc_ids:
+            # 全部跑完 → 讓畫面停留 5 秒，再回主選單(暫時這樣)
+            self.after(5000, self._return_to_main_menu)
+        else:
+            # 還有 dead NPC 在畫面 → 下一幀繼續 settlement_update
+            self.after(int(1000 / FPS), self.settlement_update)
     def _return_to_main_menu(self):
         self.destroy()
         # 重新啟動 main_menu.py（需與game.py同資料夾）
         subprocess.Popen([sys.executable, "main_menu.py"])
+    
     # --------------------------------------------------------
     # 主迴圈
     # --------------------------------------------------------
     def _loop(self):
-        # 血條為0 先回歸原始畫面
+        # 1. 如果血條歸零，或時間到，就進入結算
         if self.health_bar.is_empty():
-            self._return_to_main_menu()
+            if not self.in_settlement:
+                # 啟動一次結算（只做 start_settlement，然後直接跑第一個 settlement_update）
+                self.start_settlement()
+                self.settlement_update()   # 立刻呼叫 settlement_update
+            # 既然已經啟動結算，就不再做其他一般邏輯
             return
+
+        # 2. 時鐘更新（若有）
         if hasattr(self, 'clock'):
-            self.clock.update(paused=self.paused) # 如果現在是暫停狀態就會停止clock
+            self.clock.update(paused=self.paused)
+
         if not self.paused:
-            # 時間結束:自動回主選單
+            # 時間到 → 同理進入結算
             if self.clock.finished:
-                self._return_to_main_menu()
+                if not self.in_settlement:
+                    self.start_settlement()
+                    self.settlement_update()  # <- 立刻呼叫 settlement_update
                 return
+
+            # 3. 一般遊戲更新（只有在沒有進入結算時）
             self._update()
+
+        # 4. 若不進入結算，就繼續下一個 _loop
         self.after(int(1000 / FPS), self._loop)
 
 
