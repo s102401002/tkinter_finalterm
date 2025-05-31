@@ -57,13 +57,16 @@ class LaserBeam:
             cx = (sx + tx) / 2
             cy = (sy + ty) / 2
 
-            # 計算這段長度，縮放寬度
             seg_len = math.hypot(tx - sx, ty - sy)
             scale = seg_len / self.orig_w
 
+            # 計算目標高與寬，至少1
+            new_w = max(int(self.orig_w * scale), 1)
+            new_h = max(int(self.orig_h * 0.2), 1)
+
             # 縮放 + 旋轉
             resized = self.base_img.resize(
-                (int(self.orig_w * scale), int(self.orig_h * 0.2)),
+                (new_w, new_h),
                 Image.LANCZOS
             )
             rotated = resized.rotate(-self.angle, expand=True)
