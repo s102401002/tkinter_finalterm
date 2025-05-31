@@ -41,6 +41,8 @@ class NPC(Character):
         NPC._id_counter += 1
         #死掉的時候需要跟player通知
         self.player = player
+        #如果是被吸引死掉或是player贏了，就改成true並且刪掉它
+        self.follow_player = False
         # 載入圖片
         self.anim_walk_r = self._load_animation(asset_dir / 'man/right/walk', walk_fps, fps, 13,3)
         self.anim_walk_l = self._load_animation(asset_dir / 'man/left/walk', walk_fps, fps, 13,3)
@@ -205,6 +207,15 @@ class NPC(Character):
                     self.canvas.itemconfig(self.id_died,state='normal', image=self.current_img)
                 else:
                     self.pose_final = True
+            # 動畫播完之後，如果要跟玩家走，就把「留在原地的屍體」刪掉
+            if self.follow_player:
+                if self.id_died is not None:
+                   self.canvas.delete(self.id_died)
+                   self.id_died = None
+                return
+            
+            # 如果不追隨玩家，就繼續保持在原地顯示最後一張倒地圖
+            self.canvas.coords(self.id_died, screen_x, self.y)
             return
         if self.is_attracted_PK:
             img_f = self.anim_attr_flash_mul.next()
@@ -326,7 +337,7 @@ class NPC(Character):
             )
             self._root = root_window
             def _drain():
-                root_window.health_bar.lose_one_step(0.15)
+                root_window.health_bar.lose_one_step(0.05)
                 # 500 ms 後再扣
                 self._drain_id = root_window.after(500, _drain)
 
@@ -385,9 +396,10 @@ class NPC(Character):
         self.is_dead = True
         self._died_counter = 0
         self.pose_final = False
-        
+        self.follow_player = True   # 死亡後要開始跟玩家移動
         # 通知player有一個npc死掉了
         if self.player is not None:
+            self.follow_player = True
             self.player.add_dead_npc()
 
         '''

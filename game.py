@@ -66,7 +66,7 @@ class ElectricEyeGame(tk.Tk):
         self.ui_canvas = tk.Canvas(self, width=WIDTH, height=50, bg="#007500", highlightthickness=0)
         self.ui_canvas.place(x=0, y=0)
         # 第三個canvas放時鐘(因為會超出綠色的位置所以另外開一個canvas)
-        self.clock_canvas = tk.Canvas(self, width=50, height=50, bg="#FFFFFF", highlightthickness=0)
+        self.clock_canvas = tk.Canvas(self, width=50, height=50, bg="#007500", highlightthickness=0)
         self.clock_canvas.place(x=400, y=0)
         # 暫停的相關參數
         self.paused = False
@@ -280,7 +280,7 @@ class ElectricEyeGame(tk.Tk):
                 if beam in self.beams:
                     self.beams.remove(beam)
             if success:
-                print("玩家成功搶到NPC")  
+                # print("玩家成功搶到NPC")  
                 self.dead_npc.exit_pk_mode(player_win=True)
                 for girl in self.attack_npc_girl:
                     girl.exit_pk_mode(player_win=True, player_face_r=self.player.face_right)
@@ -290,6 +290,8 @@ class ElectricEyeGame(tk.Tk):
 
                 #--通知player又有一隻npc死了--
                 self.player.add_dead_npc()
+                #PK贏後刪掉該男npc
+                self.dead_npc.follow_player = True
                 self.attack_npc_girl.clear()
                 '''Add commentMore actions
                 掉愛心
@@ -333,7 +335,7 @@ class ElectricEyeGame(tk.Tk):
         # 如果目前是 PK 模式 → 不處理任何短按或 stop_dialog
         if self.pk_bar:
             self.pk_bar.on_click()
-            self.health_bar.lose_one_step(0.15)
+            self.health_bar.lose_one_step(0.05)
             
         # ─── 短按：取消 long-press───
         if not self._longpress:
@@ -468,15 +470,17 @@ class ElectricEyeGame(tk.Tk):
             self.ui_canvas.config(height=50, bg="#007500")  # 恢復原高度與樣式
             # self.clock_canvas.config(height=50, bg="#007500")
     def _show_pause_menu(self):
-        overlay = self.ui_canvas.create_rectangle(300, 100, 600, 300, fill="white", outline="black")
+        overlay = self.ui_canvas.create_rectangle(300, 100, 600, 360, fill="white", outline="black")
         text_continue = self.ui_canvas.create_text(450, 160, text="繼續遊戲", font=("Arial", 14), fill="black")
-        text_quit = self.ui_canvas.create_text(450, 220, text="結束遊戲", font=("Arial", 14), fill="black")
-
-        self.pause_menu_items = [overlay, text_continue, text_quit]
+        text_back = self.ui_canvas.create_text(450, 220, text="返回主頁面", font=("Arial", 14), fill="black")
+        text_quit = self.ui_canvas.create_text(450, 280, text="結束遊戲", font=("Arial", 14), fill="black")
+        
+        self.pause_menu_items = [overlay, text_continue, text_back, text_quit]
 
         self.ui_canvas.tag_bind(text_continue, "<Button-1>", lambda e: self._toggle_pause())
+        self.ui_canvas.tag_bind(text_back, "<Button-1>", lambda e: self._return_to_main_menu())
         self.ui_canvas.tag_bind(text_quit, "<Button-1>", lambda e: self.destroy())
-
+        
     def _hide_pause_menu(self):
         for item in self.pause_menu_items:
             self.ui_canvas.delete(item)
