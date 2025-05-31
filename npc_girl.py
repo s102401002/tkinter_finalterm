@@ -9,6 +9,8 @@ EXCLAM_FPS = 16
 EXCLAM_FRAME_NUM = 4
 EXA_OFFSET = 120
 FLY_FPS = 16
+EYE_OFFSET_Y = 70
+EYE_OFFSET_X = 20
 class NPC_GIRL(Character):
     _id_counter = 0
     def __init__(self, canvas: tk.Canvas, asset_dir: Path, start_x: int, y: int, walk_fps: int,fps: int, world_left: int, world_right: int):
@@ -31,10 +33,10 @@ class NPC_GIRL(Character):
          # 分配並遞增 npc_id
         self.npc_id = NPC_GIRL._id_counter
         NPC_GIRL._id_counter += 1
-        def mk(img):                  
-                    return ImageTk.PhotoImage(
-                        img.resize((img.width, img.height), Image.Resampling.LANCZOS)
-                    )
+        def mk(img: Image.Image, scale: int):
+            return ImageTk.PhotoImage(
+                img.resize((img.width//scale, img.height//scale), Image.Resampling.LANCZOS)
+            )
         # 載入圖片
         self.anim_walk_r = self._load_animation(asset_dir / 'woman/right/walk', walk_fps, fps, 12,1)
         self.anim_walk_l = self._load_animation(asset_dir / 'woman/left/walk', walk_fps, fps, 12,1)
@@ -45,11 +47,12 @@ class NPC_GIRL(Character):
         self.anim_fly_r = self._load_animation(asset_dir / 'woman/right/fly', FLY_FPS, fps, 4,1)
         self.anim_fly_l = self._load_animation(asset_dir / 'woman/left/fly', FLY_FPS, fps, 4,1)
         
-        self.img_attack_r = mk(Image.open(asset_dir / f'woman/right/attack.png'))
-        self.img_notice_r = mk(Image.open(asset_dir / f'woman/right/notice.png'))
-        self.img_attack_l = mk(Image.open(asset_dir / f'woman/left/attack.png'))
-        self.img_notice_l = mk(Image.open(asset_dir / f'woman/left/notice.png'))
-        
+        self.img_attack_r = mk(Image.open(asset_dir / f'woman/right/attack.png'),1)
+        self.img_notice_r = mk(Image.open(asset_dir / f'woman/right/notice.png'),1)
+        self.img_attack_l = mk(Image.open(asset_dir / f'woman/left/attack.png'),1)
+        self.img_notice_l = mk(Image.open(asset_dir / f'woman/left/notice.png'),1)
+        #self.img_eyestar = mk(Image.open("assets_aligned/effect/light.png").convert("RGBA"),3)
+
         self.anim_exclamation = self._load_animation(asset_dir / 'woman/exclamation', EXCLAM_FPS, fps, 4,1)
 
         
@@ -70,6 +73,14 @@ class NPC_GIRL(Character):
                                                  image=self.anim_exclamation.frames[0],
                                                  tags='npc_girl',
                                                  state='hidden')
+        '''
+        self.id_eyestar = self.canvas.create_image(screen_x, self.y-EYE_OFFSET_Y,
+                                                 image=self.img_eyestar,
+                                                 tags='npc_girl',
+                                                 state='hidden')
+        '''
+        
+        
 
         self.id = self.id_walk
         self.shock = False
@@ -172,6 +183,19 @@ class NPC_GIRL(Character):
            screen_x = self.world_x-bg_offset
            self.face_right = True if screen_x<=x else False
            self.atk_img = self.img_attack_r if self.face_right else self.img_attack_l
+        '''
+            # 先計算「眼睛光點」要放在哪裡
+            offsset = EYE_OFFSET_X if self.face_right else -EYE_OFFSET_X
+            new_eyestar_x = screen_x + offsset
+            new_eyestar_y = self.y - EYE_OFFSET_Y
+
+            # 1) 用 coords() 來移動 id_eyestar 到 (new_eyestar_x, new_eyestar_y)
+            self.canvas.coords(self.id_eyestar, new_eyestar_x, new_eyestar_y)
+            # 2) 再用 itemconfig() 來把它打開 (state='normal')
+            self.canvas.itemconfig(self.id_eyestar, state='normal')
+            self.canvas.tag_raise(self.id_eyestar)
+        '''
+       
     def exit_pk_mode(self, player_win: bool, player_face_r: bool):
         if player_win:
             self.in_pk_mode = False
@@ -179,12 +203,14 @@ class NPC_GIRL(Character):
             self.face_right = player_face_r
             self.anim = self.anim_fly_r if self.face_right else  self.anim_fly_l
             self.canvas.itemconfig(self.id_walk, state='normal', image=self.anim.frames[0])
+            #self.id_eyestar = self.canvas.itemconfig(self.id_eyestar,state='hidden')
         else:    #女npc 贏
             self.in_pk_mode = False
             self.is_win = True
             self.face_right = player_face_r
             self.anim = self.anim_win_r if self.face_right else  self.anim_win_l
             self.canvas.itemconfig(self.id_walk, state='normal', image=self.anim.frames[0])
+            #self.id_eyestar = self.canvas.itemconfig(self.id_eyestar,state='hidden')
 
 
 

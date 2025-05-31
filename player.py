@@ -5,7 +5,8 @@ from animation import Animation
 # 播放跌倒動畫時的目標 FPS 和總幀數
 FALL_DOWN_FPS = 12
 FALL_DOWN_FRAME_NUM = 18
-
+EYE_OFFSET_Y = 65
+EYE_OFFSET_X=5
 class Player:
     def __init__(self, canvas, x: int, y: int, asset_dir: Path,
                  walk_fps: int, run_fps: int, fps: int):
@@ -21,18 +22,18 @@ class Player:
         lr_imgs = [Image.open(asset_dir / f'player/player_left_run_{i}.png')  for i in range(9)]
         fd_l = [Image.open(asset_dir / f'player/left/lose/{i}.png')  for i in range(1, FALL_DOWN_FRAME_NUM+1)]
         fd_r = [Image.open(asset_dir / f'player/right/lose/{i}.png') for i in range(1, FALL_DOWN_FRAME_NUM+1)]
-
-        # 焦點圖（behind/front）
-        self.img_foc_lb = ImageTk.PhotoImage(Image.open(asset_dir / 'player/focusing_left_behind.png'))
-        self.img_foc_lf = ImageTk.PhotoImage(Image.open(asset_dir / 'player/focusing_left_front.png'))
-        self.img_foc_rb = ImageTk.PhotoImage(Image.open(asset_dir / 'player/focusing_right_behind.png'))
-        self.img_foc_rf = ImageTk.PhotoImage(Image.open(asset_dir / 'player/focusing_right_front.png'))
-
-        # 縮放函式
+          # 縮放函式
         def mk(img: Image.Image, scale: int):
             return ImageTk.PhotoImage(
                 img.resize((img.width//scale, img.height//scale), Image.Resampling.LANCZOS)
             )
+        #self.img_eyestar = mk(Image.open("assets_aligned/effect/light.png").convert("RGBA"),1)
+        # 焦點圖（behind/front）
+        self.img_foc_lb = mk(Image.open(asset_dir / 'player/focusing_left_behind.png'),3)
+        self.img_foc_lf = mk(Image.open(asset_dir / 'player/focusing_left_front.png'),3)
+        self.img_foc_rb = mk(Image.open(asset_dir / 'player/focusing_right_behind.png'),3)
+        self.img_foc_rf = mk(Image.open(asset_dir / 'player/focusing_right_front.png'),3)
+
 
         # 走路 / 跑步 / 跌倒 動畫
         self.anim_right_walk = Animation([mk(i, 3) for i in rw_imgs], walk_fps, fps)
@@ -55,6 +56,15 @@ class Player:
         # 將首張影像繪出
         self.current_img = self.anim.frames[0]
         self.id = self.canvas.create_image(self.x, self.y, image=self.current_img, tags='player')
+        
+        '''
+        self.id_eye = self.canvas.create_image(self.x, 
+                                               self.y-EYE_OFFSET_Y, 
+                                               image=self.img_eyestar, 
+                                               state="hidden", 
+                                               tags='player')
+        '''
+        
 
     def set_direction(self, mouse_x: int) -> bool:
         """根據滑鼠 x 決定面向，若方向變動回傳 True"""
@@ -77,7 +87,8 @@ class Player:
         """每幀更新位置與動畫，含跌倒、hover、idle 邏輯"""
         # 更新實際座標
         self.canvas.coords(self.id, self.x, self.y)
-
+        #if not self.attracting:
+            #self.canvas.itemconfig(self.id_eye, state="hidden")
         # 跌倒模式優先
         if self.lose_pk:
             total = self.anim.loops_per_frame * self.anim.n
@@ -108,6 +119,8 @@ class Player:
         else:
             img = self.current_img
         self.canvas.itemconfig(self.id, image=img)
+        #if self.attracting:
+        #    self.canvas.itemconfig(self.id_eye, state="normal")
 
     def resume_move(self):
         """跳出 hover/attract 模式後，恢復先前走/跑動畫"""

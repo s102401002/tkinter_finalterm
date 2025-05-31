@@ -47,7 +47,7 @@ RUN_SPEED = 10
 NPC_WALK_SPEED = 2
 ATTRACT_TIME = 5 # 吸引幾秒加分
 LONGPRESS_MS = 200
-EYE_OFFSET_Y = 70
+EYE_OFFSET_Y = 65
 EYE_OFFSET_X = 5
 # ------------------- main game -------------------
 class ElectricEyeGame(tk.Tk):
@@ -245,8 +245,13 @@ class ElectricEyeGame(tk.Tk):
                                             )
                
                 for girl in self.attack_npc_girl:
-                      # 轉換到畫面座標
-                    #sx = girl.world_x - self.bg_offset + EYE_OFFSET_X*2 if girl.face_right else girl.world_x - self.bg_offset -EYE_OFFSET_X*2
+                    #self.canvas.tag_raise(girl.id,beam)
+                    girl.enter_pk_mode(x,self.bg_offset)
+                                         # 轉換到畫面座標
+                    girl_on_canvas_x, girl_on_canvas_y = self.canvas.coords(girl.id_walk)
+                    off_x = 30 if girl.face_right else -30
+                    sx = girl_on_canvas_x+off_x
+                    #sx = girl.world_x - self.bg_offset +18  if girl.face_right else girl.world_x - self.bg_offset -EYE_OFFSET_X*2
                     sy = girl.y - EYE_OFFSET_Y
                     ex = x
                     ey = y - EYE_OFFSET_Y
@@ -259,8 +264,6 @@ class ElectricEyeGame(tk.Tk):
                         delay     = 40,
                     )
                     self.beams.append(beam)
-                    #self.canvas.tag_raise(girl.id,beam)
-                    girl.enter_pk_mode(x,self.bg_offset)
                 self.dead_npc.enter_pk_mode()  #動畫與邏輯與start_dialog不一樣
         # 畫面中沒有npc_girl，長按向上填滿愛心
         else:
@@ -395,7 +398,7 @@ class ElectricEyeGame(tk.Tk):
         
         bg_width = self.bg_img.width()
         margin = 500 #離走廊的邊界 避免一開始就出界
-        npc_spacing = (bg_width - 2 * margin) // self.npc_count
+        npc_spacing = (bg_width - 2 * margin) // (self.npc_count+2)
 
         npc_y = [HEIGHT-140, HEIGHT-160,  HEIGHT-220,  HEIGHT-240] # 後面兩項靠近牆壁
         

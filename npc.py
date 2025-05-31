@@ -22,7 +22,7 @@ class NPC(Character):
         self.canvas = canvas
        # 世界座標與原點
         self.origin = world_left
-        self.max_range = int((world_right - world_left)/npc_num) # 固定最大區間(分母到時候改成有幾個npc)
+        self.max_range = int((world_right - world_left)/(npc_num+2)) # 固定最大區間(分母到時候改成有幾個npc)
         self.cur_range = random.randint(20, self.max_range)            # 當前區間，初始等於最大
         self.world_x = start_x
         self.y = y
