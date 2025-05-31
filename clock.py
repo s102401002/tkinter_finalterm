@@ -48,6 +48,7 @@ class Clock:
         angle = 360 * (self.elapsed / self.total_seconds)
         if angle >= 360:
             self.canvas.itemconfig(self.fill_id, extent=0)
+            self.canvas.delete(self.fill_id)
             self.finished = True
             self.running  = False
             return 

@@ -20,9 +20,15 @@ class LaserBeam:
         self.on_finish = on_finish
         self.current_step = 1
         self.img_id = None
-
+        self.img_light_id = None
         # 載入原圖
         self.base_img = Image.open(image_path).convert("RGBA")
+        #self.light = mk(Image.open("assets_aligned/effect/light.png").convert("RGBA"))
+        def mk(img):                  
+            return ImageTk.PhotoImage(
+                img.resize((img.width//4, img.height//4), Image.Resampling.LANCZOS)
+            )
+        self.light = mk(Image.open("assets_aligned/effect/light.png").convert("RGBA"))
         self.orig_w, self.orig_h = self.base_img.size
 
         # 計算角度和總長度
@@ -57,7 +63,7 @@ class LaserBeam:
 
             # 縮放 + 旋轉
             resized = self.base_img.resize(
-                (int(self.orig_w * scale), int(self.orig_h * 0.5)),
+                (int(self.orig_w * scale), int(self.orig_h * 0.2)),
                 Image.LANCZOS
             )
             rotated = resized.rotate(-self.angle, expand=True)
@@ -72,7 +78,7 @@ class LaserBeam:
 
             # 貼上新圖
             self.img_id = self.canvas.create_image(cx, cy, image=img, anchor='center')
-
+            self.img_light_id = self.canvas.create_image(sx, sy, image=self.light, anchor='center')
             self.current_step += 1
             self.canvas.after(self.delay, self._draw_next)
         else:
@@ -107,8 +113,8 @@ if __name__ == '__main__':
         start=start,
         end=end,
         image_path="assets_aligned/effect/laser_yellow.png",
-        steps=8,
-        delay=100
+        steps=10,
+        delay=50
     )
 
     # 3 秒後手動銷毀光束

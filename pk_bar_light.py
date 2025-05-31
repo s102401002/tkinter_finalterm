@@ -1,7 +1,7 @@
 import tkinter as tk
 from pathlib import Path
 # 參數設定
-BAR_WIDTH = 100           # 最大寬度
+BAR_WIDTH = 120           # 最大寬度
 BAR_HEIGHT = 16
 BAR_X = 50
 BAR_Y = 30
@@ -28,9 +28,10 @@ class LaserBarRectApp:
         self.on_finish = on_finish  # 儲存 callback
         # 底色條（灰色背景）
         self.bar_bg = self.canvas.create_rectangle(
-            self.x0, self.y0,
-            self.x1, self.y1 ,
+            self.x0-1, self.y0-1,
+            self.x1+1, self.y1+1 ,
             fill="#EEC364", outline="#E54DF3",
+            width=3,
             tags='pk_bar'
         )
 

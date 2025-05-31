@@ -26,6 +26,7 @@ from npc_girl import NPC_GIRL
 from healthBar import HealthBar
 from pk_bar_light import LaserBarRectApp
 from heart import HeartFillClip
+from laserBeam import LaserBeam
 # ------------------- config -------------------
 WIDTH, HEIGHT = 900, 400
 FPS = 60
@@ -46,6 +47,8 @@ RUN_SPEED = 10
 NPC_WALK_SPEED = 2
 ATTRACT_TIME = 5 # 吸引幾秒加分
 LONGPRESS_MS = 200
+EYE_OFFSET_Y = 70
+EYE_OFFSET_X = 5
 # ------------------- main game -------------------
 class ElectricEyeGame(tk.Tk):
     def __init__(self, game_time=60, npc_count=7): # 由main_menu.py傳入參數
@@ -63,7 +66,7 @@ class ElectricEyeGame(tk.Tk):
         self.ui_canvas = tk.Canvas(self, width=WIDTH, height=50, bg="#007500", highlightthickness=0)
         self.ui_canvas.place(x=0, y=0)
         # 第三個canvas放時鐘(因為會超出綠色的位置所以另外開一個canvas)
-        self.clock_canvas = tk.Canvas(self, width=50, height=50, bg="#007500", highlightthickness=0)
+        self.clock_canvas = tk.Canvas(self, width=50, height=50, bg="#FFFFFF", highlightthickness=0)
         self.clock_canvas.place(x=400, y=0)
         # 暫停的相關參數
         self.paused = False
@@ -77,6 +80,7 @@ class ElectricEyeGame(tk.Tk):
         self.bg_offset = 0            # 背景目前已捲動多少 px
         self.max_offset = 0           # 背景最右能捲到多少
 
+
         # 方向切換用
         self.switching      = False
         self.switch_steps   = 0
@@ -87,6 +91,9 @@ class ElectricEyeGame(tk.Tk):
         self.hearts = {}
         #目前吃了幾個愛心
         self.score = 0
+        
+        # 用來暫存所有在畫面中的光束物件
+        self.beams: list[LaserBeam] = []
 
         # 隨機位置 (畫面左 or 右隨機一邊)
         start_x = random.choice([50, WIDTH - 50])
@@ -209,8 +216,21 @@ class ElectricEyeGame(tk.Tk):
             if 0 <= scr_x <= WIDTH:
                 self.attack_npc_girl.append(girl) 
                 girl.notice()
-
-       
+        
+        sx = self.player.x+EYE_OFFSET_X*2 if self.player.face_right else  self.player.x-EYE_OFFSET_X*2
+        sy = self.player.y - EYE_OFFSET_Y
+        ex = self.clicked_npc.world_x - self.bg_offset
+        ey = self.clicked_npc.y - EYE_OFFSET_Y
+        beamp = LaserBeam(
+            canvas     = self.canvas,
+            start      = (sx, sy),
+            end        = (ex, ey),
+            image_path = str(ASSETS_DIR / 'effect' / 'laser_pink.png'),
+            steps      = 8,
+            delay      = 40,
+        )
+        #self.canvas.tag_raise(self.player.id,beamp)
+        self.beams.append(beamp)
         if self.attack_npc_girl :
             if not self.in_pk_mode:
                 self.in_pk_mode = True #第一次長按觸發對戰模式
@@ -223,8 +243,23 @@ class ElectricEyeGame(tk.Tk):
                                             fps=FPS,
                                             on_finish=self._on_pk_finished 
                                             )
-                
+               
                 for girl in self.attack_npc_girl:
+                      # 轉換到畫面座標
+                    #sx = girl.world_x - self.bg_offset + EYE_OFFSET_X*2 if girl.face_right else girl.world_x - self.bg_offset -EYE_OFFSET_X*2
+                    sy = girl.y - EYE_OFFSET_Y
+                    ex = x
+                    ey = y - EYE_OFFSET_Y
+                    beam = LaserBeam(
+                        canvas    = self.canvas,
+                        start     = (sx, sy),
+                        end       = (ex, ey),
+                        image_path= str(ASSETS_DIR / 'effect' / 'laser_yellow.png'),
+                        steps     = 8,
+                        delay     = 40,
+                    )
+                    self.beams.append(beam)
+                    #self.canvas.tag_raise(girl.id,beam)
                     girl.enter_pk_mode(x,self.bg_offset)
                 self.dead_npc.enter_pk_mode()  #動畫與邏輯與start_dialog不一樣
         # 畫面中沒有npc_girl，長按向上填滿愛心
@@ -232,10 +267,15 @@ class ElectricEyeGame(tk.Tk):
             self.dead_npc = None
             self.clicked_npc.start_dialog(self)
             self.clicked_npc.update(self.bg_offset)
+        
     def _on_pk_finished(self, success: bool):
         if self.pk_bar:
             self.pk_bar.destroy()
             self.pk_bar = None
+            for beam in self.beams[:]:
+                beam.destroy()           # LaserBeam 本身會刪掉它的 img_id
+                if beam in self.beams:
+                    self.beams.remove(beam)
             if success:
                 print("玩家成功搶到NPC")  
                 self.dead_npc.exit_pk_mode(player_win=True)
@@ -244,7 +284,23 @@ class ElectricEyeGame(tk.Tk):
                     #girl.update(self.bg_offset)
                 #self.dead_npc.update(self.bg_offset)
                 #self.player.update()
-                self.attack_npc_girl.clear()  
+                self.attack_npc_girl.clear()
+                '''Add commentMore actions
+                掉愛心
+                '''
+                heal = 1.5 # 治癒的血量
+                heart = HeartFillClip.instant_create(
+                    canvas         = self.canvas,
+                    cx             = self.clicked_npc.world_x,
+                    screen_x       = self.clicked_npc.world_x - self.bg_offset,
+                    cy             = self.clicked_npc.y-120,
+                    scale          = 2.0,
+                    target_y       = HEIGHT - 120,
+                    on_fall_finish = None,
+                    heal_amount    = heal
+                )
+                self.hearts[heart.fill_id] = heart
+            # print(self.hearts)  
                 #
                 #self._update_score_display()
             else:
@@ -285,6 +341,10 @@ class ElectricEyeGame(tk.Tk):
         else:
             if not self.in_pk_mode:
                 self.clicked_npc.stop_dialog()
+                for beam in self.beams[:]:
+                    beam.destroy()           # LaserBeam 本身會刪掉它的 img_id
+                    if beam in self.beams:
+                        self.beams.remove(beam)
                 for girl in self.npc_girl_list:
                     if girl.shock:
                         girl.shock = False
@@ -464,13 +524,21 @@ class ElectricEyeGame(tk.Tk):
             hy = sum(ys) / len(ys)
 
             if abs(hx - px) < pw // 2 and abs(hy - py) < ph // 2:
+                # 3. 碰撞成功：刪圖、清參考、補血、計分
                 self.canvas.delete(heart.fill_id)
-                npc.heart = None
-                
-                self.score += 1
-                self._update_score_display()# 更新記分板
 
-                self.health_bar.gain(1)  # 吃到愛心補一顆
+                # 如果這顆心是綁在某個 npc 上，清掉那個參考
+                for npc in self.npc_list:
+                    if getattr(npc, 'heart', None) is heart:
+                        npc.heart = None
+                # 如果你有用 self.hearts dict，也把它 pop 出來
+                self.hearts.pop(heart.fill_id, None)
+
+                # 分數與補血
+                self.score += 1
+                self._update_score_display()
+                self.health_bar.gain(heart.heal_amount)
+                # print("eat"+ str(heart.heal_amount))
     def _update_npcs(self):
         # update NPC
         for npc in self.npc_list:
@@ -508,13 +576,20 @@ class ElectricEyeGame(tk.Tk):
         # 0. 表示愛心已填滿，玩家可以開始移動，要同步更新愛心位置     
         # =====================================================
         # 收集要更新的 heart
+        # 收集要更新的 heart
         hearts = []
         # 1. 取出 npc_list 上綁的 hearts
         for npc in self.npc_list:
-            h = getattr(npc, 'heart', None)
-            if h:  
-                if h.fall_finished or h.if_startfall:  
-                    h.update(self.bg_offset)
+            if getattr(npc, 'heart', None):
+                hearts.append(npc.heart)
+
+        # 2. 再把 self.hearts dict 裡管理的 hearts 一起加進來
+        hearts.extend(self.hearts.values())
+        # print(hearts)
+        # 統一更新
+        for h in hearts:
+            if h.fall_finished or h.if_startfall:
+                h.update(self.bg_offset)
         # =====================================================
         # 1-1.玩家跌倒中(無視所有滑鼠事件)
         # =====================================================

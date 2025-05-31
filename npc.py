@@ -318,7 +318,7 @@ class NPC(Character):
                 heart_cx,
                 screen_x,
                 heart_cy,
-                scale = 1.2,
+                scale = 1.5,
                 target_y = player_foot_y, # 愛心填滿後，落下的目標y座標
                 on_fall_finish = self.on_heart_filled  # 愛心填滿後，把這個npc刪掉
                 
