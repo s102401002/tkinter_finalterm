@@ -13,9 +13,20 @@ EYE_OFFSET_Y = 70
 EYE_OFFSET_X = 20
 class NPC_GIRL(Character):
     _id_counter = 0
-    def __init__(self, canvas: tk.Canvas, asset_dir: Path, start_x: int, y: int, walk_fps: int,fps: int, world_left: int, world_right: int):
+    def __init__( self,
+                canvas: tk.Canvas,
+                asset_dir: Path,
+                start_x: int,
+                y: int,
+                walk_fps: int,
+                fps: int,
+                world_left: int,
+                world_right: int,
+                game        
+                ):
         self.canvas = canvas
-       # 世界座標與原點
+        self.game = game  
+        # 世界座標與原點
         self.origin = world_left
         self.max_range = int((world_right - world_left)/7) # 固定最大區間
         self.cur_range = random.randint(20, self.max_range) # 當前區間，初始等於最大
@@ -33,6 +44,7 @@ class NPC_GIRL(Character):
          # 分配並遞增 npc_id
         self.npc_id = NPC_GIRL._id_counter
         NPC_GIRL._id_counter += 1
+
         def mk(img: Image.Image, scale: int):
             return ImageTk.PhotoImage(
                 img.resize((img.width//scale, img.height//scale), Image.Resampling.LANCZOS)
@@ -212,6 +224,142 @@ class NPC_GIRL(Character):
             self.canvas.itemconfig(self.id_walk, state='normal', image=self.anim.frames[0])
             #self.id_eyestar = self.canvas.itemconfig(self.id_eyestar,state='hidden')
 
+    def reset(self):
+        """
+        重置 NPC_GIRL 到最初狀態：
+        1. 刪除走路與驚嘆號圖層（若還在畫布上）
+        2. 重置所有旗標、動畫與位置
+        3. 重新在畫布上畫出「走路」圖層，隱藏「驚嘆號」
+        """
+        # 一、刪掉畫布上的舊圖層
+        for layer_id in (self.id_walk, self.id_exclamation):
+            if layer_id is not None:
+                try:
+                    self.canvas.delete(layer_id)
+                except Exception:
+                    pass
 
+        # 二、恢復屬性
+        self.shock = False
+        self.in_pk_mode = False
+        self.is_win = False
+        self.is_lose = False
+        self.stopping = False
+        self._end_hits = 0
+        self.exa_counter = self.exa_loops_per_frame * EXCLAM_FRAME_NUM  # 直接讓驚嘆號動畫停在最後一幀
+        # 動畫也要切回走路動畫
+        if self.face_right:
+            self.anim = self.anim_walk_r
+        else:
+            self.anim = self.anim_walk_l
+        self.anim._loop_counter = 0
+        self.current_img = self.anim.frames[0]
 
+        # 重新隨機一個行走範圍或保持世界座標不動；以下示範保留 world_x，只重新設定範圍邊界
+        self.cur_range = random.randint(20, self.max_range)
+        self.bdr_left = self.world_x - self.cur_range
+        self.bdr_right = self.world_x + self.cur_range
 
+        # 三、重建圖層
+        screen_x = self.world_x
+        # 走路圖層
+        self.id_walk = self.canvas.create_image(screen_x, self.y,
+                                                image=self.current_img,
+                                                tags='npc_girl')
+        # 驚嘆號圖層（隱藏）
+        self.id_exclamation = self.canvas.create_image(screen_x, self.y - EXA_OFFSET,
+                                                       image=self.anim_exclamation.frames[0],
+                                                       state='hidden',
+                                                       tags='npc_girl')
+        self.id = self.id_walk
+        # 四、重新加上同一個 tag（方便 update 時統一找）
+        self.canvas.addtag_withtag(self._tag, self.id_walk)
+
+    def destroy(self):
+        """
+        刪除此 NPC_GIRL 的所有 canvas item，並同步把自己從 game 中的 npc_girl_list
+        與 floor_data[current_floor]['girl_list'] 移除。
+        """
+        # 1. 刪除自己所有的圖層 (走路、驚嘆號)
+        for layer_id in (self.id_walk, self.id_exclamation):
+            if layer_id is not None:
+                try:
+                    self.canvas.delete(layer_id)
+                except Exception:
+                    pass
+
+        # 2. 把自己從全域 _instances（如果有）移除
+        #    (NPC_GIRL._instances 並非一定實作，如果有可移)
+        #    假設我們不放 _instances，則跳過此步
+
+        # 3. 把自己從目前遊戲實例的 npc_girl_list 中移除
+        if hasattr(self.game, 'npc_girl_list') and self in self.game.npc_girl_list:
+            self.game.npc_girl_list.remove(self)
+
+        # 4. 把自己也從 floor_data[current_floor]['girl_list'] 移除
+        cur_floor = getattr(self.game, 'floor', None)
+        if cur_floor is not None:
+            fl_data = self.game.floor_data.get(cur_floor)
+            if fl_data and 'girl_list' in fl_data and self in fl_data['girl_list']:
+                fl_data['girl_list'].remove(self)
+
+        # 5. 清空自身參考
+        self.id_walk = self.id_exclamation = None
+        self.canvas = None
+        self.game = None
+
+    def hide(self):
+        """
+        只隱藏/刪除畫布上的所有圖層 (走路、驚嘆號)，不改變任何內部狀態。
+        這樣再呼叫 show() 時，能依照 world_x、face_right、anim 狀態把它完整還原上畫布。
+        """
+        for layer_id in (self.id_walk, self.id_exclamation):
+            if layer_id is not None:
+                try:
+                    self.canvas.delete(layer_id)
+                except Exception:
+                    pass
+        self.id_walk = self.id_exclamation = None
+
+    def show(self):
+        """
+        根據目前存的世界座標 (world_x)、動畫狀態 (self.anim, self.current_img)、面向 (face_right) 等，
+        把 NPC_GIRL 所有必要的圖層重建回畫布上。
+        hide() 之後呼這個，就能在新的背景/樓層上顯示出它。
+        """
+        screen_x = self.world_x - self.game.bg_offset
+
+        # 決定當前主圖：如果正處於「驚訝模式」，就先顯示驚嘆號當前那一幀；否則顯示走路動畫當前幀
+        if getattr(self, 'shock', False):
+            # 正在驚訝，先抓驚嘆號動畫第 exa_counter 幀（exclamation）
+            frame_idx = min(self.exa_counter // self.exa_loops_per_frame, EXCLAM_FRAME_NUM - 1)
+            img_ex = self.anim_exclamation.frames[frame_idx]
+            # 先建立「走路」圖層的 placeholder，再立刻切換成驚嘆號畫面
+            self.id_walk = self.canvas.create_image(
+                screen_x, self.y,
+                image=self.img_notice_r if self.face_right else self.img_notice_l,
+                tags='npc_girl'
+            )
+            self.id_exclamation = self.canvas.create_image(
+                screen_x, self.y - EXA_OFFSET,
+                image=img_ex,
+                tags='npc_girl'
+            )
+        else:
+            # 一般走路／勝利／飛走／輸掉等態，直接用 self.current_img
+            self.id_walk = self.canvas.create_image(
+                screen_x, self.y,
+                image=self.current_img,
+                tags='npc_girl'
+            )
+            # 隱藏驚嘆號圖層（若之後要播放，update() 會自行顯示）
+            self.id_exclamation = self.canvas.create_image(
+                screen_x, self.y - EXA_OFFSET,
+                image=self.anim_exclamation.frames[0],
+                state='hidden',
+                tags='npc_girl'
+            )
+
+        # 將兩個圖層都加上相同的 tag，方便後續統一移動、排序、隱藏
+        for cid in (self.id_walk, self.id_exclamation):
+            self.canvas.addtag_withtag(self._tag, cid)
