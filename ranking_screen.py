@@ -46,7 +46,7 @@ class RankingScreen(tk.Toplevel):
     def _save_ranking(self):
         path = Path(self.RANK_FILE)
         with path.open("w", encoding="utf-8") as f:
-            for name, score in self.ranking[:10]:
+            for name, score in self.ranking:
                 f.write(f"{name},{score}\n")
 
     def _setup_style(self):
@@ -63,20 +63,20 @@ class RankingScreen(tk.Toplevel):
         )
         style.map(
             "Custom.Treeview",
-            background=[("selected", "#4a7a8c")],
-            foreground=[("selected", "#ffffff")]
+            background=[("active", "#f09af8")],
+            foreground=[("active", "#ffffff")]
         )
 
         style.configure(
             "Custom.Treeview.Heading",
-            background="#4a7a8c",
-            foreground="#ffffff",
+            background="#e48ce7",
+            foreground="#000000",
             font=("Helvetica", 12, "bold"),
             relief="flat"
         )
-        style.map(
+        style.map(# 滑鼠移到 Header 時變色
             "Custom.Treeview.Heading",
-            background=[("active", "#6e9ba8")]
+            background=[("active", "#e55ae0")]
         )
 
         style.configure(

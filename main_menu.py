@@ -2,7 +2,7 @@ import tkinter as tk
 import tkinter.ttk as ttk
 import threading
 from game import ElectricEyeGame
-
+from ranking_screen import RankingScreen 
 class GameLauncher(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -21,6 +21,7 @@ class GameLauncher(tk.Tk):
 
         tk.Button(btn_frame, text="開始遊戲", width=20, font=("Arial", 12), command=self.start_game).pack(pady=5)
         tk.Button(btn_frame, text="設定", width=20, font=("Arial", 12), command=self.open_settings).pack(pady=5)
+        tk.Button(btn_frame, text="查看排行榜", width=20, font=("Arial", 12), command=self.open_leaderboard).pack(pady=5)
         tk.Button(btn_frame, text="結束程式", width=20, font=("Arial", 12), command=self.quit).pack(pady=5)
 
     def start_game(self):
@@ -43,7 +44,9 @@ class GameLauncher(tk.Tk):
         tk.Spinbox(settings, from_=1, to=20, textvariable=self.npc_count, font=("Arial", 10)).pack()
 
         tk.Button(settings, text="確定", command=settings.destroy).pack(pady=15)
-
+    def open_leaderboard(self):
+        # 從主選單開啟排行榜，直接顯示 Treeview
+        RankingScreen(self).show_treeview()
 # -------------------------------
 # 載入動畫用的 Loading 視窗
 # -------------------------------

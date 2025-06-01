@@ -18,7 +18,7 @@ from pk_bar_light import LaserBarRectApp
 from heart import HeartFillClip
 from laserBeam import LaserBeam
 from hover_button import HoverButton
-
+from ranking_screen import RankingScreen
 # ------------------- config -------------------
 WIDTH, HEIGHT = 900, 400
 FPS = 60
@@ -989,51 +989,109 @@ class ElectricEyeGame(tk.Tk):
 
     def start_settlement(self):
         """
-        啟動結算流程：讓 player 及其身後的 dead NPC 開始往右跑，
-        並準備一個 set 來記錄哪些 dead NPC 已經跳過 +1000 分數。
+        啟動結算流程：
+        1. 若有正在被吸引 (is_attracted_noPK 或 is_attracted_PK) 的 NPC，
+        強制先結束吸引（呼叫 stop_dialog／exit_pk_mode）。
+        2. 把所有活著 (is_dead == False) 或 曾在吸引 中的 NPC 統統從畫布刪掉，
+        並從 self.npc_list 移除（只保留 is_dead == True，且 is_attracted_* 為 False 的）。
+        3. 其餘：刪掉 pk_bar、女 NPC、光束，讓 player 跑到左側、切成走路動畫、
+        清空 scored_npc_ids、unbind 滑鼠互動。
         """
         self.in_settlement = True
+
         # ----------------------------------------------------
-        # (A) 把所有「活著的 NPC」從畫布移除
+        # (A) 如果 pk_bar 存在就先刪
+        # ----------------------------------------------------
+        if hasattr(self, 'pk_bar') and self.pk_bar:
+            try:
+                self.pk_bar.destroy()
+            except:
+                pass
+            self.pk_bar = None
+
+        # ----------------------------------------------------
+        # (B) 先強制結束「正在被吸引」的 NPC 動作
         # ----------------------------------------------------
         for npc in self.npc_list:
+            if getattr(npc, 'is_attracted_noPK', False):
+                npc.stop_dialog()   # 取消對話、設 is_attracted_noPK=False
+            if getattr(npc, 'is_attracted_PK', False):
+                npc.exit_pk_mode(player_win=False)   # 退出 PK 狀態、設 is_attracted_PK=False
+
+        # ----------------------------------------------------
+        # (C) 把所有「活著或曾被吸引」的 NPC 加入刪除清單
+        # ----------------------------------------------------
+        to_remove = []
+        for npc in self.npc_list:
+            # 若仍然 is_dead==False（還活著），或 is_attracted_... == True（剛才可能剛終止，但狀態可能還沒同步），都刪
+            if (not getattr(npc, 'is_dead', False)
+                or getattr(npc, 'is_attracted_noPK', False)
+                or getattr(npc, 'is_attracted_PK', False)):
+                to_remove.append(npc)
+
+        # 從畫布刪除這些 NPC，並把它們的 npc.id 設為 None
+        for npc in to_remove:
             try:
                 self.canvas.delete(npc.id)
             except:
                 pass
+            npc.id = None
+
+        # 更新 self.npc_list，只保留「is_dead == True 且 is_attracted_* == False」的 NPC
+        self.npc_list = [
+            npc for npc in self.npc_list
+            if getattr(npc, 'is_dead', False)
+            and not getattr(npc, 'is_attracted_noPK', False)
+            and not getattr(npc, 'is_attracted_PK', False)
+        ]
+
         # ----------------------------------------------------
-        # (B) 把所有「光束 (beams)」從畫布移除
+        # (D) 刪除所有光束 (self.beams)
         # ----------------------------------------------------
         for beam in self.beams:
+            try:
+                beam.destroy()
+            except:
+                pass
             try:
                 self.canvas.delete(beam.id)
             except:
                 pass
         self.beams.clear()
-        # 讓玩家面向右、改用「走路速度」
+
+        # ----------------------------------------------------
+        # (E) 刪除所有女 NPC (npc_girl_list)
+        # ----------------------------------------------------
+        for girl in self.npc_girl_list:
+            try:
+                if getattr(girl, 'id_walk', None):
+                    self.canvas.delete(girl.id_walk)
+            except:
+                pass
+            try:
+                if getattr(girl, 'id_exclamation', None):
+                    self.canvas.delete(girl.id_exclamation)
+            except:
+                pass
+        self.npc_girl_list.clear()
+
+        # ----------------------------------------------------
+        # (F) 玩家走路設定：面向右、走路速度、位置、動畫
+        # ----------------------------------------------------
         self.player.face_right = True
-        self.player.vx = WALK_SPEED    # 由 RUN_SPEED 改成 WALK_SPEED
-        #把player移到左邊 開始動畫
+        self.player.vx = WALK_SPEED
         self.player.x = 150
-        self.player.update()
-        # 改用「走路動畫」，讓結算看起來更一致
-        self.player.anim = (
-            self.player.anim_right_walk if self.player.face_right
-            else self.player.anim_left_walk
-        )
+        self.player.update(in_settlement=True)
+        self.player.anim = self.player.anim_right_walk
 
-        # 重置計分用資料結構
+        # ----------------------------------------------------
+        # (G) 重置計分結構 & 停用滑鼠互動
+        # ----------------------------------------------------
         self.scored_npc_ids.clear()
-
-        # 停用所有滑鼠互動
         self.canvas.unbind("<Motion>")
         self.canvas.unbind("<ButtonPress-1>")
         self.canvas.unbind("<ButtonRelease-1>")
 
-        # （選）可整個背景暫停不動或直接靜止
-        # 不要再捲動背景了，所以不動 background
-        # 你可以讓 bg_offset 固定住，或直接不在 settlement 中執行 _update() 的背景邏輯
-        # 於是，在 settlement_update() 只移動 player 與 dead NPC
     def animate_score_text(self, text_id, steps=20, dy=2, fade_step=5):
         """
         讓剛出現的「+1000」文字在 steps 幀內往上移動 dy 像素，
@@ -1116,14 +1174,17 @@ class ElectricEyeGame(tk.Tk):
         self.canvas.itemconfig(self.player.id, image=img)
 
         # --------------------------------------
-        # （四）4) 檢查是否所有 dead NPC 都跑完
+        # （四）檢查是否所有 dead NPC 都跑完、並且玩家也跑出畫面
         # --------------------------------------
-        if not self.player.dead_npc_ids:
-            # 全部跑完 → 讓畫面停留 5 秒，再回主選單(暫時這樣)
-            self.after(5000, self._return_to_main_menu)
-        else:
-            # 還有 dead NPC 在畫面 → 下一幀繼續 settlement_update
+        px, py = self.canvas.coords(self.player.id)
+        player_gone = (px is not None and px > WIDTH + 150)
+
+        if (not player_gone) or (self.player.dead_npc_ids):
+            # 還沒離開畫面或還有 dead NPC，就繼續排程下一幀
             self.after(int(1000 / FPS), self.settlement_update)
+        else:
+            # 玩家已離開、而且 dead NPC 全部刪除，停留 5 秒再回主選單
+            self.after(5000, self._return_to_main_menu)
     # --------------------------------------------------------
     # 返回主選單
     # --------------------------------------------------------
