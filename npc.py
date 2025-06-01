@@ -17,15 +17,30 @@ HOVER_OFFSET_X = 30
 class NPC(Character):
     _id_counter = 0
     _instances = []      # <- 新增：所有 NPC 實例都會放在這裡 #別忘了在刪除時從 _instances 裡移除
-    def __init__(self, canvas: tk.Canvas, asset_dir: Path, start_x: int, y: int, walk_fps: int,fps: int, world_left: int, world_right: int, npc_num: int, player):
+    def __init__(self,
+                canvas: tk.Canvas,
+                asset_dir: Path,
+                start_x: int,
+                y: int,
+                walk_fps: int,
+                fps: int,
+                world_left: int,
+                world_right: int,
+                npc_num: int,
+                player,
+                game    # <--- 新增，用來儲存 ElectricEyeGame 的參考
+                ):
         NPC._instances.append(self) ##註冊
         self.canvas = canvas
+        self.game = game 
+        self.game.npc_list = []   # => 之後 destroy() 會用到
        # 世界座標與原點
         self.origin = world_left
         self.max_range = int((world_right - world_left)/(npc_num+2)) # 固定最大區間(分母到時候改成有幾個npc)
         self.cur_range = random.randint(20, self.max_range)            # 當前區間，初始等於最大
         self.world_x = start_x
         self.y = y
+        self._root = None # 
         self._root = None # 
         # 動態邊界
         self.bdr_left = self.world_x - self.cur_range
@@ -39,6 +54,10 @@ class NPC(Character):
          # 分配並遞增 npc_id
         self.npc_id = NPC._id_counter
         NPC._id_counter += 1
+        #死掉的時候需要跟player通知
+        self.player = player
+        #如果是被吸引死掉或是player贏了，就改成true並且刪掉它
+        self.follow_player = False
         #死掉的時候需要跟player通知
         self.player = player
         #如果是被吸引死掉或是player贏了，就改成true並且刪掉它
@@ -198,7 +217,11 @@ class NPC(Character):
             self.heart.update(bg_offset)
         screen_x = self.world_x - bg_offset
         if self.is_dead:
-            # self.canvas.coords(self.id_died, screen_x, self.y)
+            if self.follow_player:
+                if self.id_died is not None:
+                   self.canvas.delete(self.id_died)
+                   self.id_died = None
+                return
             if not self.pose_final:
                 # 用 Animation._loop_counter 判斷
                 total = self.anim.loops_per_frame * self.anim.n   # 播完整套需要的 update 次數
@@ -216,6 +239,11 @@ class NPC(Character):
 
             # 如果不追隨玩家，就繼續保持在原地顯示最後一張倒地圖
             self.canvas.coords(self.id_died, screen_x, self.y)
+            # 動畫播完之後，如果要跟玩家走，就把「留在原地的屍體」刪掉
+            
+            
+            # 如果不追隨玩家，就繼續保持在原地顯示最後一張倒地圖
+            #self.canvas.coords(self.id_died, screen_x, self.y)
             return
         if self.is_attracted_PK:
             img_f = self.anim_attr_flash_mul.next()
@@ -338,6 +366,17 @@ class NPC(Character):
             self._root = root_window
             def _drain():
                 root_window.health_bar.lose_one_step(0.05)
+                # 每500ms加1分
+                root_window._update_score_display(add=1)
+                # 500 ms 後再扣
+                self._drain_id = root_window.after(500, _drain)
+
+            # 立即執行第一次
+            _drain()
+            
+            self._root = root_window
+            def _drain():
+                root_window.health_bar.lose_one_step(0.05)
                 #每500ms加1分
                 root_window._update_score_display(add=1)
                 # 500 ms 後再扣
@@ -402,6 +441,12 @@ class NPC(Character):
         # 通知player有一個npc死掉了
         if self.player is not None:
             self.follow_player = True
+            self.player.add_dead_npc(self)
+
+        self.follow_player = True   # 死亡後要開始跟玩家移動
+        # 通知player有一個npc死掉了
+        if self.player is not None:
+            self.follow_player = True
             self.player.add_dead_npc()
 
         '''
@@ -443,4 +488,99 @@ class NPC(Character):
         if self.is_attracted_noPK:
             self.timer_label.config(text=f"對話中：{self.timer_seconds} 秒")
             self.timer_seconds += 1
-            root_window.after(1000, lambda: self._update_timer(root_window))#
+            root_window.after(1000, lambda: self._update_timer(root_window))
+    # npc.py (同檔案第 127 行以後)
+    def reset(self):
+        """
+        重置此 NPC 到最初狀態：
+        1. 刪除所有圖層（走路、特效、懸停、倒地）
+        2. 重置狀態旗標、動畫、位置
+        3. 重新在畫布上建立所有圖層並隱藏不需要顯示的部分
+        """
+        # 一、先把畫布上的舊圖層全都刪掉（若還存在的話）
+        for layer_id in (self.id_walk, self.id_flash, self.id_weak, self.id_hover, self.id_died):
+            if layer_id is not None:
+                try:
+                    self.canvas.delete(layer_id)
+                except Exception:
+                    pass
+
+        # 二、恢復 NPC 的各項屬性
+        self.is_attracted_noPK = False
+        self.is_attracted_PK = False
+        self.is_dead = False
+        self.follow_player = False
+        self.stopping = False
+        self.is_focused = False
+        self.is_hovered = False
+        self.pose_final = False
+        self._hover_raised = False
+        self._flash_step = 0
+        self._hover_counter = 0
+        self._died_counter = 0
+
+        # 重新隨機一個行走範圍（bdr_left、bdr_right），或保持原本 world_x 不變也行
+        # 這邊示範保持 world_x 不變，只重置範圍大小：
+        self.cur_range = random.randint(20, self.max_range)
+        self.bdr_left = self.world_x - self.cur_range
+        self.bdr_right = self.world_x + self.cur_range
+
+        # 三、重設動畫器（如果之前有換到倒地動畫，就切回走路動畫）
+        if self.face_right:
+            self.anim = self.anim_walk_r
+        else:
+            self.anim = self.anim_walk_l
+        self.anim._loop_counter = 0
+        self.current_img = self.anim.frames[0]
+
+        # 四、重建畫布圖層（走路圖、特效圖、懸停、倒地，但只有走路圖一開始要顯示）
+        screen_x = self.world_x
+        # 走路圖層（初始化顯示）
+        self.id_walk = self.canvas.create_image(screen_x, self.y,
+                                                image=self.current_img,
+                                                tags='npc')
+        # 閃光特效（隱藏）
+        self.id_flash = self.canvas.create_image(screen_x, self.y,
+                                                 image=self.anim_attr_flash.frames[0],
+                                                 state='hidden',
+                                                 tags='npc')
+        # 衰弱特效（隱藏）
+        self.id_weak = self.canvas.create_image(screen_x, self.y,
+                                                image=self.anim_attr_weak.frames[0],
+                                                state='hidden',
+                                                tags='npc')
+        # 懸停動畫（隱藏）
+        self.id_hover = self.canvas.create_image(screen_x - HOVER_OFFSET_X,
+                                                 self.y - HOVER_OFFSET,
+                                                 image=self.anim_focus[0],
+                                                 state='hidden',
+                                                 tags='npc')
+        # 倒地圖層（隱藏）
+        # 如果面向右，就用右側倒地的第一張；若面向左則用左側倒地第一張
+        died_img = self.anim_died_r.frames[0] if self.face_right else self.anim_died_l.frames[0]
+        self.id_died = self.canvas.create_image(screen_x, self.y,
+                                                image=died_img,
+                                                state='hidden',
+                                                tags='npc')
+        self.id = self.id_walk
+        # 五、把所有圖層加上同樣的 tag（方便之後統一操作）
+        for cid in (self.id_walk, self.id_flash, self.id_weak, self.id_hover, self.id_died):
+            self.canvas.addtag_withtag(self._tag, cid)
+    
+   
+
+    def hide(self):
+        """
+        只隱藏（或刪除）畫布上的所有圖層，但不清除任何內部屬性。
+        這樣之後呼叫 show() 時，就能依照原本的狀態把它完整還原到畫布上。
+        """
+        for layer_id in (self.id_walk, self.id_flash, self.id_weak, self.id_hover, self.id_died):
+            if layer_id is not None:
+                try:
+                    self.canvas.delete(layer_id)
+                except Exception:
+                    pass
+        # 將所有圖層 id 全部設為 None，以示目前畫布上已不再存在它們
+        self.id_walk = self.id_flash = self.id_weak = self.id_hover = self.id_died = None
+
+    

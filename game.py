@@ -1,24 +1,13 @@
-'''
-待修復或未完成項目:
-================================================================
-1.(完成)npc和npc_girl初始投放要均勻分布分布,不可走到玩家拿不到愛心的地方
-2.npc和npc_girl的走路範圍重新設定,盡量減少交錯的情形(這個可以有空再改)
-3.(完成)pk贏的愛心掉落
-4.bar需傳入有幾個npc_girl在畫面中,決定遞減倍數
-5.bar的輸贏需callback(贏寫一半,輸完全沒開始)
-6.(完成)攻擊時的扣血量先註解掉,長按與短按扣除方法不同，pk時點一下扣0.15顆，吸引時每500ms扣0.15顆
-==================================================================
-
-
-'''
+# game.py
 
 import tkinter as tk
 from pathlib import Path
 from PIL import Image, ImageTk
-import random 
+import random
 import subprocess
 import sys
 import time
+
 from animation import Animation
 from player import Player
 from clock import Clock
@@ -28,131 +17,163 @@ from healthBar import HealthBar
 from pk_bar_light import LaserBarRectApp
 from heart import HeartFillClip
 from laserBeam import LaserBeam
+from hover_button import HoverButton
+
 # ------------------- config -------------------
 WIDTH, HEIGHT = 900, 400
 FPS = 60
 ASSETS_DIR = Path(__file__).with_suffix('').with_name("assets_aligned")
+
 PLAYER_Y_ADJUST = -50
-PLAYER_HIT_LEFT_BDR_X = WIDTH * 4 // 7
-PLAYER_HIT_RIGHT_BDR_X = WIDTH * 1 // 5
 PLAYER_LEFT_X = WIDTH * 3 // 4
 PLAYER_RIGHT_X = WIDTH // 4
 PLAYER_CENTER_X = WIDTH // 2
 BG_SPEED_MULT_RUN = 1.5
-SWITCH_STEPS = 15
+NPC_WALK_FPS = 16
 WALK_FPS = 16
 RUN_FPS = 32
-NPC_WALK_FPS = 16
 WALK_SPEED = 3
 RUN_SPEED = 10
 NPC_WALK_SPEED = 2
-ATTRACT_TIME = 5 # 吸引幾秒加分
 LONGPRESS_MS = 200
 EYE_OFFSET_Y = 65
 EYE_OFFSET_X = 5
+
 NORMAL_HEART_HEAL = 1.0
 BIG_HEART_HEAL = 1.5
 # ------------------- main game -------------------
 class ElectricEyeGame(tk.Tk):
-    def __init__(self, game_time=20, npc_count=7): # 由main_menu.py傳入參數
+    def __init__(self, game_time=60, npc_count=7): 
         super().__init__()
+
+        # --- 基本視窗與 Canvas 設定 ---
         self.game_time = game_time
         self.npc_count = npc_count
         self.title("電眼美女")
         self.resizable(False, False)
-        
-        self.geometry(f"{WIDTH}x{HEIGHT + 50}")  # 設定整個視窗高度
-        # ---- 畫布 ----
+        self.geometry(f"{WIDTH}x{HEIGHT + 50}")  # 主視窗大小
+
+        # 畫布：遊戲畫面
         self.canvas = tk.Canvas(self, width=WIDTH, height=HEIGHT, bg="#000000", highlightthickness=0)
         self.canvas.place(x=0, y=50)
-        #第二個canvas放血條、記分板、時間
+
+        # UI 畫布：放血條、分數、按鈕
         self.ui_canvas = tk.Canvas(self, width=WIDTH, height=50, bg="#007500", highlightthickness=0)
         self.ui_canvas.place(x=0, y=0)
-        # 第三個canvas放時鐘(因為會超出綠色的位置所以另外開一個canvas)
+
+        # 時鐘畫布：獨立放時鐘
         self.clock_canvas = tk.Canvas(self, width=50, height=50, bg="#007500", highlightthickness=0)
         self.clock_canvas.place(x=400, y=0)
-        # 暫停的相關參數
+
+        # 暫停狀態相關
         self.paused = False
         self.pause_menu_items = []
+        
         # 結算模式（settlement mode）相關屬性
         self.in_settlement = False
         self.scored_npc_ids = set()  # 用於記錄已跳過 +1000 分的 dead NPC image id
 
-        # ---- 狀態變數 ----
+        # --- 樓層管理變數 ---
+        self.floor_data = {}       # 用來存放每一層的 {bg_img, npc_list, girl_list, bg_width}
+        self.floor = 2            # 當前樓層 (1~3)
+        self.total_floors = 3
+        self.up_btn = None
+        self.down_btn = None
+        self.is_switching_floor = True
+        self.id_black_canvas = None
+        # 存放遊戲狀態用變數
+        self.bg_img = None
+        self.bg_offset = 0
+        self.max_offset = 0
+
+        # 切換樓層按鈕
+        self.first_load = True
+
+        # 角色(與個數)
+        self.player = Player(
+            self.canvas,
+            PLAYER_CENTER_X,
+            HEIGHT - 160,
+            asset_dir = ASSETS_DIR,
+            walk_fps = WALK_FPS,
+            run_fps = RUN_FPS,
+            fps = FPS
+        )
+
+        self.npc_list = []
+        self.npc_girl_list = []
+        self.hearts = {}
+        self.score = 0
+        self.beams = []
+        self.followers = []
+        # 游標追蹤
         self.mouse_x = PLAYER_CENTER_X
         self.mouse_y = HEIGHT // 2
 
-        self.bg_offset = 0            # 背景目前已捲動多少 px
-        self.max_offset = 0           # 背景最右能捲到多少
-
-
-        # 方向切換用
-        self.switching      = False
-        self.switch_steps   = 0
-        self.switch_dx_scr  = 0
+        # 方向切換
+        self.switching = False
+        self.switch_steps = 0
+        self.switch_dx_scr = 0
         self.switch_world_x = 0
 
-        # 存PK後掉落的愛心，一般吸引的愛心綁在npc裡
-        self.hearts = {}
-        #目前吃了幾個愛心
-        self.score = 0
-        
-        # 用來暫存所有在畫面中的光束物件
-        self.beams: list[LaserBeam] = []
-
-        # 隨機位置 (畫面左 or 右隨機一邊)
-        start_x = random.choice([50, WIDTH - 50])
-        y = HEIGHT - 120 # 280
-
-        
-        
-        # ---- 事件與資源 ----
-        self._bind_events()
-        self._load_assets()
-        self._setup_world()
-        self._setup_ui() #建立血條、時間...
-        
-        self.hover_npc = None # 判斷紀錄按下滑鼠時在不在npc上
+        # 滯留、對話、PK 模式等
+        self.hover_npc = None
         self.focus_npc = None
-        self.clicked_npc = None  # 避免 _on_mouse_move 報錯
+        self.clicked_npc = None
         self.dead_npc = None
-        self.attack_npc_girl = [] #現在screen中有幾個女生要攻擊
-        self._lp_after_id = None   # long-press 計時器 after-id
-        self._outline_id  = None   # 當前 outline polygon id
-        self._longpress   = False  # 這次是否已被視為長按
+        self.attack_npc_girl = []
+        self._lp_after_id = None
+        self._longpress = False
         self.in_pk_mode = False
         self.pk_bar = None
-        # ---- 主迴圈、計時 ----
-        self.clock.update(paused=True) # 避免一開始填滿時鐘的bug-3.0
+
+        # 綁定滑鼠事件
+        self._bind_events()
+
+       # 先載入所有樓層資料
+        self._preload_all_floors()
+
+        # 直接同步顯示一樓，省去黑幕
+        #print(self.floor_data[1].keys(), self.floor_data[1]['bg_img'])
+        self._activate_floor(self.floor,use_blackout=False)
+        self.is_switching_floor = False   # 確保 _loop() 能正常更新
+
+        # 預載完成後，先啟動「一樓」
+        self._switch_down()
+
+        # 設置 UI (血條、分數、暫停按鈕)
+        self._setup_ui()
+
+        # 啟動時鐘與主迴圈
+        self.clock.update(paused=True)
         self.clock.start()
         self._loop()
 
     """
-    自訂清除函式，避免結束時的錯誤訊息
+    自訂 destroy，自行清除畫布引用，避免錯誤
     """
     def destroy(self):
-        # 主動清除 canvas 與引用
         self.canvas.delete("all")
         self.ui_canvas.delete("all")
         self.canvas = None
         self.ui_canvas = None
-        self.bg_img = None  # 避免 PIL 圖像殘留
+        self.bg_img = None
         super().destroy()
-    # --------------------------------------------------------
-    # 事件綁定
-    # --------------------------------------------------------
+
+    # ========================================================
+    # 事件綁定 (滑鼠移動 / 點擊)
+    # ========================================================
     def _bind_events(self):
         self.canvas.bind("<Motion>", self._on_mouse_move)
-        # self.canvas.bind("<Button-1>", self._on_click)
         self.canvas.bind("<ButtonPress-1>", self._on_press)
         self.canvas.bind("<ButtonRelease-1>", self._on_release)
 
     def _on_mouse_move(self, e):
         self.mouse_x, self.mouse_y = e.x, e.y
-        # ---- 判斷滑鼠是不是在npc上: 在這裡判斷好，再交給on_press和on_release處理----
+        # 判斷滑鼠是否在 NPC 上
         self.hover_npc = None
         for npc in self.npc_list:
-            if npc.id is None: # npc.py->start_dialog->remove_npc方法中有npc.i=None的操作
+            if npc.id is None:
                 continue
             coords = self.canvas.coords(npc.id)
             if not coords:
@@ -163,20 +184,23 @@ class ElectricEyeGame(tk.Tk):
             if abs(e.x - x1) <= img_w // 2 and abs(e.y - y1) <= img_h // 2:
                 self.hover_npc = npc
                 if self.hover_npc != self.focus_npc:
-                    if self.focus_npc != None:
-                       self.focus_npc._on_hover_leave()
+                    if self.focus_npc is not None :
+                        self.focus_npc._on_hover_leave()
                     self.focus_npc = self.hover_npc
-                    self.focus_npc._on_hover_enter()   
+                    self.focus_npc._on_hover_enter()
                 return
-        if self.hover_npc == None and self.focus_npc:
+
+        if self.hover_npc is None and self.focus_npc:
             self.focus_npc._on_hover_leave()
-            self.focus_npc =None
-        # 按到一半時滑鼠離開原本npc位置 視為放開滑鼠 
+            self.focus_npc = None
+
+        # 如果滑鼠按下後移開原本 NPC，視同放開
         if self.clicked_npc and self.hover_npc != self.clicked_npc:
             if not self.clicked_npc.is_attracted_PK:
                 self._on_release(e)
-   
+
     def _on_press(self, event):
+        #print("press")
         if self.player.lose_pk:
             return
         if self.hover_npc and not self.in_pk_mode:
@@ -187,46 +211,33 @@ class ElectricEyeGame(tk.Tk):
             self.player.attracting = True
             self.clicked_npc.is_focused = True
             self.clicked_npc.stopping = True
-            #for girl in self.npc_girl_list:
-            #    screen_x = girl.world_x - self.bg_offset
-            #    if 0 <= screen_x <= WIDTH:
-            #        girl.notice()
-                    #self.attack_npc_girl.append(girl.id)    
-            
-            #self.clicked_npc.start_dialog(self)
-            #self.clicked_npc.update(self.bg_offset)
-            self._longpress   = False
-            
+            self._longpress = False
             self._lp_after_id = self.after(LONGPRESS_MS, self._handle_long_press)
-            # 扣一小段血
-            #self.health_bar.lose_one_step()
-   
 
     def _handle_long_press(self):
-        """滿 1 秒觸發；若滑鼠仍停留在同一隻 NPC 上就進入對話"""
+        # 長按一秒後，若滑鼠仍在同一 NPC，就開始對話或 PK
         self._lp_after_id = None
         if not self.clicked_npc or self.clicked_npc.is_dead:
             return
-        # 確保滑鼠仍懸停同隻 NPC
         if self.hover_npc is None or self.hover_npc is not self.clicked_npc:
             return
 
         self._longpress = True
         self.attack_npc_girl = []
-        # NPC girls notice…
+        # 找出所有在畫面內的 NPC_GIRL 進 PK
         for girl in self.npc_girl_list:
             if girl.is_win or girl.is_lose:
                 continue
             scr_x = girl.world_x - self.bg_offset
             if 0 <= scr_x <= WIDTH:
-                self.attack_npc_girl.append(girl) 
+                self.attack_npc_girl.append(girl)
                 girl.notice()
-        
-        sx = self.player.x+EYE_OFFSET_X*2 if self.player.face_right else  self.player.x-EYE_OFFSET_X*2
+
+        sx = self.player.x + (EYE_OFFSET_X * 2 if self.player.face_right else -EYE_OFFSET_X * 2)
         sy = self.player.y - EYE_OFFSET_Y
         ex = self.clicked_npc.world_x - self.bg_offset
         ey = self.clicked_npc.y - EYE_OFFSET_Y
-        beamp = LaserBeam(
+        beam = LaserBeam(
             canvas     = self.canvas,
             start      = (sx, sy),
             end        = (ex, ey),
@@ -234,131 +245,110 @@ class ElectricEyeGame(tk.Tk):
             steps      = 8,
             delay      = 40,
         )
-        #self.canvas.tag_raise(self.player.id,beamp)
-        self.beams.append(beamp)
-        if self.attack_npc_girl :
+        self.beams.append(beam)
+
+        if self.attack_npc_girl:
+            # 進入 PK 模式
             if not self.in_pk_mode:
-                self.in_pk_mode = True #第一次長按觸發對戰模式
-                x=self.clicked_npc.world_x-self.bg_offset
-                y=self.clicked_npc.y
+                self.in_pk_mode = True
+                x = self.clicked_npc.world_x - self.bg_offset
+                y = self.clicked_npc.y
                 self.pk_bar = LaserBarRectApp(self.canvas,
-                                            screen_x=x,
-                                            y=y-120,
-                                            anim_fps=10,
-                                            fps=FPS,
-                                            on_finish=self._on_pk_finished 
-                                            )
-               
+                                              screen_x=x,
+                                              y=y-120,
+                                              anim_fps=10,
+                                              fps=FPS,
+                                              on_finish=self._on_pk_finished)
                 for girl in self.attack_npc_girl:
-                    #self.canvas.tag_raise(girl.id,beam)
-                    girl.enter_pk_mode(x,self.bg_offset)
-                                         # 轉換到畫面座標
+                    girl.enter_pk_mode(x, self.bg_offset)
                     girl_on_canvas_x, girl_on_canvas_y = self.canvas.coords(girl.id_walk)
                     off_x = 30 if girl.face_right else -30
-                    sx = girl_on_canvas_x+off_x
-                    #sx = girl.world_x - self.bg_offset +18  if girl.face_right else girl.world_x - self.bg_offset -EYE_OFFSET_X*2
-                    sy = girl.y - EYE_OFFSET_Y
-                    ex = x
-                    ey = y - EYE_OFFSET_Y
-                    beam = LaserBeam(
+                    sx2 = girl_on_canvas_x + off_x
+                    sy2 = girl.y - EYE_OFFSET_Y
+                    beam2 = LaserBeam(
                         canvas    = self.canvas,
-                        start     = (sx, sy),
-                        end       = (ex, ey),
+                        start     = (sx2, sy2),
+                        end       = (x, y - EYE_OFFSET_Y),
                         image_path= str(ASSETS_DIR / 'effect' / 'laser_yellow.png'),
                         steps     = 8,
                         delay     = 40,
                     )
-                    self.beams.append(beam)
-                self.dead_npc.enter_pk_mode()  #動畫與邏輯與start_dialog不一樣
-        # 畫面中沒有npc_girl，長按向上填滿愛心
+                    self.beams.append(beam2)
+                self.dead_npc.enter_pk_mode()
         else:
+            # 沒有 NPC_GIRL，就進行單純對話
             self.dead_npc = None
             self.clicked_npc.start_dialog(self)
             self.clicked_npc.update(self.bg_offset)
-        
+
     def _on_pk_finished(self, success: bool):
-        if self.pk_bar:
-            self.pk_bar.destroy()
-            self.pk_bar = None
-            for beam in self.beams[:]:
-                beam.destroy()           # LaserBeam 本身會刪掉它的 img_id
-                if beam in self.beams:
-                    self.beams.remove(beam)
-            if success:
-                # print("玩家成功搶到NPC")  
-                self.dead_npc.exit_pk_mode(player_win=True)
-                for girl in self.attack_npc_girl:
-                    girl.exit_pk_mode(player_win=True, player_face_r=self.player.face_right)
-                    #girl.update(self.bg_offset)
-                #self.dead_npc.update(self.bg_offset)
-                #self.player.update()
+        if not self.pk_bar:
+            return
+        self.pk_bar.destroy()
+        self.pk_bar = None
 
-                #--通知player又有一隻npc死了--
-                self.player.add_dead_npc()
-                #PK贏後刪掉該男npc
-                self.dead_npc.follow_player = True
-                self.attack_npc_girl.clear()
-                '''Add commentMore actions
-                掉愛心
-                '''
-                heal = BIG_HEART_HEAL # 治癒的血量
-                heart = HeartFillClip.instant_create(
-                    canvas         = self.canvas,
-                    cx             = self.clicked_npc.world_x,
-                    screen_x       = self.clicked_npc.world_x - self.bg_offset,
-                    cy             = self.clicked_npc.y-120,
-                    scale          = 2.0,
-                    target_y       = HEIGHT - 120,
-                    on_fall_finish = None,
-                    heal_amount    = heal
-                )
-                self.hearts[heart.fill_id] = heart
-            # print(self.hearts)  
-                #
-                #self._update_score_display()
-            else:
-                print("被其他女孩搶走了")  
-                self.dead_npc.exit_pk_mode(player_win=False)
-                self.player.lose_pk_mode()
-                #self.player.update()
-                for girl in self.attack_npc_girl:
-                    girl.exit_pk_mode(player_win=False, player_face_r=self.player.face_right)
-                    #girl.update(self.bg_offset)
-                self.health_bar.lose_one_step()
-                #self.dead_npc.update(self.bg_offset)
-            self.player.attracting = False 
-            self.in_pk_mode = False
-            self.dead_npc = None
-            self.attack_npc_girl.clear()        
+        for beam in self.beams[:]:
+            beam.destroy()
+            if beam in self.beams:
+                self.beams.remove(beam)
 
-                # 扣一小段血
+        if success:
+            # 玩家贏
+            self.dead_npc.exit_pk_mode(player_win=True)
+            for girl in self.attack_npc_girl:
+                girl.exit_pk_mode(player_win=True, player_face_r=self.player.face_right)
+            self.player.add_dead_npc(self.dead_npc)
+            self.dead_npc.follow_player = True
+            self.attack_npc_girl.clear()
+
+            heal = BIG_HEART_HEAL # 治癒的血量
+            heart = HeartFillClip.instant_create(
+                canvas         = self.canvas,
+                cx             = self.clicked_npc.world_x,
+                screen_x       = self.clicked_npc.world_x - self.bg_offset,
+                cy             = self.clicked_npc.y - 120,
+                scale          = 2.0,
+                target_y       = HEIGHT - 120,
+                on_fall_finish = None,
+                heal_amount    = heal
+            )
+            self.hearts[heart.fill_id] = heart
+
+        else:
+            # 玩家輸
+            self.dead_npc.exit_pk_mode(player_win=False)
+            self.player.lose_pk_mode()
+            for girl in self.attack_npc_girl:
+                girl.exit_pk_mode(player_win=False, player_face_r=self.player.face_right)
             self.health_bar.lose_one_step()
 
+        self.player.attracting = False
+        self.in_pk_mode = False
+        self.dead_npc = None
+        self.attack_npc_girl.clear()
+        self.health_bar.lose_one_step()
+
     def _on_release(self, event):
+        #print("release")
         if self.player.lose_pk:
             return
-        # 如果目前是 PK 模式 → 不處理任何短按或 stop_dialog
         if self.pk_bar:
             self.pk_bar.on_click()
-            self.health_bar.lose_one_step(0.05)
+            self.health_bar.lose_one_step(0.15)
             #點一次加3分
             self._update_score_display(add=3)
-            
-        # ─── 短按：取消 long-press───
+
         if not self._longpress:
             if self._lp_after_id:
                 self.after_cancel(self._lp_after_id)
                 self._lp_after_id = None
             if not self.in_pk_mode:
-                # 恢復玩家走路狀態            
                 self.player.attracting = False
-
-        # ─── 長按：照原本 stop_dialog 流程 ───
         else:
             if not self.in_pk_mode:
                 self.clicked_npc.stop_dialog()
                 for beam in self.beams[:]:
-                    beam.destroy()           # LaserBeam 本身會刪掉它的 img_id
+                    beam.destroy()
                     if beam in self.beams:
                         self.beams.remove(beam)
                 for girl in self.npc_girl_list:
@@ -366,229 +356,304 @@ class ElectricEyeGame(tk.Tk):
                         girl.shock = False
                         girl.update(self.bg_offset)
                 self.player.attracting = False
+
         if not self.in_pk_mode:
-            self.clicked_npc  = None
-        self._longpress   = False
-    # --------------------------------------------------------
-    # 載入背景與角色貼圖
-    # --------------------------------------------------------
-    def _load_assets(self):
-        # ---- 背景 ----
-        bg = Image.open(ASSETS_DIR / 'bg.png')
-        nh = HEIGHT
-        nw = int(bg.width * nh / bg.height)
-        bg = bg.resize((nw, nh), Image.Resampling.LANCZOS)
-        self.bg_img = ImageTk.PhotoImage(bg)
-        self.max_offset = nw - WIDTH
+            self.clicked_npc = None
+        self._longpress = False
 
-        
+    # ========================================================
+    # 預載所有樓層 (背景＋NPC＋NPC_GIRL)
+    # ========================================================
+    def _preload_all_floors(self):
+        for fl in range(1, self.total_floors + 1):
+            # 載入背景
+            bg_path = ASSETS_DIR / f"bg{fl}.png"
+            bg = Image.open(bg_path)
+            nh = HEIGHT
+            nw = int(bg.width * nh / bg.height)
+            bg = bg.resize((nw, nh), Image.Resampling.LANCZOS)
+            bg_img_tk = ImageTk.PhotoImage(bg)
+
+
+            # 用一個「暫時 Canvas」來建構 NPC 與 NPC_GIRL（不顯示）
+            temp_canvas = tk.Canvas(self, width=WIDTH, height=HEIGHT)
+            npc_list, girl_list = self._generate_npcs(temp_canvas, nw)
+
+            # 儲存進 floor_data
+            self.floor_data[fl] = {
+                'bg_img': bg_img_tk,
+                'npc_list': npc_list,
+                'girl_list': girl_list,
+                'bg_width': nw
+            }
 
     # --------------------------------------------------------
-    # 建立背景與玩家物件
+    # 生成單層的 NPC / NPC_GIRL 列表
     # --------------------------------------------------------
-    def _setup_world(self):
-        # 背景加 'bg' tag，之後只移動這個 tag
-        self.bg_offset = (self.bg_img.width() - WIDTH) // 2
-        self.canvas.create_image(-self.bg_offset, 0, image=self.bg_img,
-                                 anchor='nw', tags='bg')
-        
-        self.canvas.tag_lower('bg')  # 背景放到最底
-        
-        # 玩家
-        self.player = Player(self.canvas,
-                             PLAYER_CENTER_X,
-                             HEIGHT - 190 ,
-                             asset_dir=ASSETS_DIR,
-                             walk_fps=WALK_FPS,
-                             run_fps=RUN_FPS,
-                             fps=FPS
-                             )
-        # assets 資料夾路徑
-        npc_asset_dir = ASSETS_DIR / 'npc' 
+    def _generate_npcs(self, canvas, bg_width):
+        npc_list = []
+        girl_list = []
+        npc_asset_dir = ASSETS_DIR / 'npc'
+        margin = 500
+        spacing = (bg_width - 2 * margin) // (self.npc_count + 2)
+        y_choices = [HEIGHT - 110, HEIGHT - 130, HEIGHT - 190, HEIGHT - 210]
 
-        # 建立 NPC 物件
-        self.npc_list = []
-        
-        bg_width = self.bg_img.width()
-        margin = 500 #離走廊的邊界 避免一開始就出界
-        npc_spacing = (bg_width - 2 * margin) // (self.npc_count+2)
-
-        npc_y = [HEIGHT-140, HEIGHT-160,  HEIGHT-220,  HEIGHT-240] # 後面兩項靠近牆壁
-        
-        for ii in range(self.npc_count):  # 一次隨機生成 7 個
-            idx = random.randrange(len(npc_y))
-            y = npc_y[idx]
+        # 建立 NPC
+        for i in range(self.npc_count):
+            y = random.choice(y_choices)
             npc = NPC(
-                self.canvas,
+                canvas,
                 npc_asset_dir,
-                start_x=margin + ii * npc_spacing + random.randint(0, npc_spacing // 2),# 改成多npc均勻分布(原本只能最多七個npc 不然會超出去)
-                y=y,
-                walk_fps=NPC_WALK_FPS,
+                start_x = margin + i * spacing + random.randint(0, spacing // 2),
+                y = y,
+                walk_fps = NPC_WALK_FPS,
                 fps = FPS,
-                world_left=300,
-                world_right=self.bg_img.width() - 300,
-                npc_num=self.npc_count,
-                player=self.player #新增 為了跟在後面的死npc
+                world_left = 300,
+                world_right = bg_width - 300,
+                npc_num = self.npc_count,
+                player = None,  # 稍後再指派真實 player
+                game = self 
             )
-            if idx == 2 or idx == 3:
-                self.canvas.tag_raise(npc.id, 'bg') #在player之下，背景之上
-            self.npc_list.append(npc)
-       
-        self.npc_girl_list = []
-        for ii in range(4):  # 例如一次隨機生成 7 個
-            idx = random.randrange(len(npc_y))
-            y = npc_y[idx]
-            npc = NPC_GIRL(
-                self.canvas,
-                npc_asset_dir,
-                start_x=random.randint(1000+ii*500, 1000+(ii+1)*500),
-                y=y,
-                walk_fps=NPC_WALK_FPS,
-                fps = FPS,
-                world_left=300,
-                world_right=self.bg_img.width() - 300
-            )
-            if idx == 2 or idx == 3:
-                self.canvas.tag_raise(npc.id, 'bg') #在player之下，背景之上
-            self.npc_girl_list.append(npc)
-    def _setup_ui(self):
-        self.health_bar = HealthBar(self.ui_canvas, x=20, y=20, spacing=35, max_hearts=9, initial_full=4)
-        # 暫停按鈕
-        self.pause_btn = self.ui_canvas.create_oval(840, 5, 880, 45, fill="red", outline="white")
-        self.pause_text = self.ui_canvas.create_text(860, 25, text="||", fill="white", font=("Arial", 14, "bold"))
-        self.ui_canvas.tag_bind(self.pause_btn, "<Button-1>", self._toggle_pause)
-        self.ui_canvas.tag_bind(self.pause_text, "<Button-1>", self._toggle_pause)
+            npc_list.append(npc)
 
-        # 時鐘
-        self.clock = Clock(self.clock_canvas, center_x=25, center_y=25, radius=20, total_seconds=self.game_time)
-        # self.clock.reset()
-        # 分數文字
-        self.score_text = self.ui_canvas.create_text(650, 25, text=f"Score: {self.score}", fill="white", font=("Arial", 24))
-    def _update_score_display(self, add=0):
-        self.score += add
-        self.ui_canvas.itemconfig(self.score_text, text=f"Score: {self.score}")
-    def _toggle_pause(self, event=None):
-        self.paused = not self.paused
-        if self.paused:
-            # self.clock_canvas.config(height=HEIGHT, bg="white")
-            self.ui_canvas.config(height=HEIGHT, bg="white") #暫時把ui_canva拉大 才能看到其他選項
-            self._show_pause_menu()
+        # 建立 NPC_GIRL
+        for i in range(4):
+            y = random.choice(y_choices)
+            girl = NPC_GIRL(
+                canvas,
+                npc_asset_dir,
+                start_x = random.randint(1000 + i * 500, 1000 + (i + 1) * 500),
+                y = y,
+                walk_fps = NPC_WALK_FPS,
+                fps = FPS,
+                world_left = 300,
+                world_right = bg_width - 300,
+                game = self 
+            )
+            girl_list.append(girl)
+
+        return npc_list, girl_list
+
+    # ========================================================
+    # 切換樓層：先顯示黑色遮罩，再延遲呼叫 _show_floor_content()
+    # ========================================================
+    def _activate_floor(self, floor ,use_blackout=True):
+        if use_blackout:
+            # 一定要把回傳的 id 存到 self.id_black_canvas
+            self.id_black_canvas = self.canvas.create_rectangle(
+                0, 0, WIDTH, HEIGHT,
+                fill='black', tags='blackout'
+            )
+            # 改回用 after_idle 比較保險：確保在所有清畫布、貼場景完成後再 call _show_floor_content
+            self.canvas.after_idle(
+                lambda: self._show_floor_content(self.floor_data[floor])
+            )
+            self.canvas.tag_raise(self.player.id)
         else:
-            self._hide_pause_menu()
-            self.ui_canvas.config(height=50, bg="#007500")  # 恢復原高度與樣式
-            # self.clock_canvas.config(height=50, bg="#007500")
-    def _show_pause_menu(self):
-        overlay = self.ui_canvas.create_rectangle(300, 100, 600, 360, fill="white", outline="black")
-        text_continue = self.ui_canvas.create_text(450, 160, text="繼續遊戲", font=("Arial", 14), fill="black")
-        text_back = self.ui_canvas.create_text(450, 220, text="返回主頁面", font=("Arial", 14), fill="black")
-        text_quit = self.ui_canvas.create_text(450, 280, text="結束遊戲", font=("Arial", 14), fill="black")
+            # use_blackout=False 時就不用畫黑幕
+            self._show_floor_content(self.floor_data[floor])
+            self.canvas.tag_raise(self.player.id)
+
+    def _show_floor_content(self, data):
+        # 如果之前真的有 overlay，也一定要先把它刪掉
+        if getattr(self, 'id_black_canvas', None) is not None:
+            self.canvas.delete(self.id_black_canvas)   # 刪掉黑幕
+            self.id_black_canvas = None
+        new_floor = self.floor
+        old_floor = getattr(self, 'prev_floor', None)
+
+
+         # 1. Hide（或刪除）舊樓層的 NPC/Girl 圖片
+        if old_floor is not None:
+            # 只針對 NPC、NPC_GIRL tag 做刪除
+            self.canvas.delete("npc")       
+            self.canvas.delete("npc_girl") 
         
-        self.pause_menu_items = [overlay, text_continue, text_back, text_quit]
-
-        self.ui_canvas.tag_bind(text_continue, "<Button-1>", lambda e: self._toggle_pause())
-        self.ui_canvas.tag_bind(text_back, "<Button-1>", lambda e: self._return_to_main_menu())
-        self.ui_canvas.tag_bind(text_quit, "<Button-1>", lambda e: self.destroy())
+        # 設定背景
+        self.bg_img = data['bg_img']
+        if self.first_load:
+            self.first_load = False
+            self.bg_offset = (self.bg_img.width() - WIDTH) // 2 
+        self.max_offset = data['bg_width'] - WIDTH
+        self.canvas.create_image(-self.bg_offset, 0, image=self.bg_img, anchor='nw', tags='bg')
+        self.canvas.tag_lower('bg')
         
-    def _hide_pause_menu(self):
-        for item in self.pause_menu_items:
-            self.ui_canvas.delete(item)
-        self.pause_menu_items.clear()
-    # --------------------------------------------------------
-    # 依滑鼠距離決定速度
-    # --------------------------------------------------------
-    def _determine_speed(self) -> int:
+        if old_floor is not None:
+            for old_npc in self.floor_data[old_floor]['npc_list']:
+                if old_npc.is_dead and old_npc.follow_player:
+                    if old_npc not in self.followers:
+                        self.followers.append(old_npc)
+                old_npc.hide()
+            for old_girl in self.floor_data[old_floor]['girl_list']:
+                old_girl.hide()
+
+       
+
+        new_npc_list = data['npc_list']
+        new_girl_list = data['girl_list']
         
-        if self.player.set_direction(self.mouse_x):
-            # 方向改變 → 啟動切換流程
-            tgt = PLAYER_RIGHT_X if self.player.face_right else PLAYER_LEFT_X
-            self.switching = True
-            self.switch_steps   = SWITCH_STEPS
-            self.switch_dx_scr  = (tgt - self.player.x) / SWITCH_STEPS
-            self.switch_world_x = self.bg_offset + self.player.x
+        for npc in new_npc_list:
+            if not npc.is_dead:
+                npc.canvas = self.canvas
+                npc.player = self.player
+                npc.reset()
 
-        # 距離小於 8 px → 停
-        dx = self.mouse_x - self.player.x
-        if abs(dx) < 8:
-            return 0
-        return RUN_SPEED if abs(dx) > WIDTH * 0.3 else WALK_SPEED
+        for girl in new_girl_list:
+            if not girl.is_lose and not girl.is_win:
+                girl.canvas = self.canvas
+                girl.reset()
 
-    '''
-    判斷有沒有吃到愛心
-    '''
-    def _check_heart_collision(self):
-        px, py = self.player.x, self.player.y
-        pw = self.player.anim.frames[0].width()
-        ph = self.player.anim.frames[0].height()
 
-        # 收集要更新的 heart
-        hearts = []
-        # 1. 取出 npc_list 上綁的 hearts
-        for npc in self.npc_list:
-            if getattr(npc, 'heart', None):
-                hearts.append(npc.heart)
+        # 再把跨樓層「正在跟隨玩家」的 NPC 也 show() 一次
+        #    self.followers 存的都是全遊戲裡所有 follow_player == True 的實例
+        for follower in self.followers:
+            self.player.add_dead_npc(follower)
 
-        # 2. 再把 self.hearts dict 裡管理的 hearts 一起加進來
-        # 把 self.hearts 裡的也包成一樣格式
-        hearts.extend(self.hearts.values())
+            
+        self.npc_list = new_npc_list + [f for f in self.followers if f not in new_npc_list]
+        self.npc_girl_list = new_girl_list.copy()
+        
+        self.player.canvas = self.canvas
+        self.player.face_right = False if self.player.face_right else True
+       
+        self.player.draw()
 
-        # 3. 統一做碰撞檢測
-        for heart in hearts:
-            if not (heart.fill_id and heart.fall_finished):
-                continue
+        self.prev_floor = new_floor
+        
 
-            coords = self.canvas.coords(heart.fill_id)
-            if not coords:
-                continue
-            xs, ys = coords[::2], coords[1::2]
-            hx = sum(xs) / len(xs)
-            hy = sum(ys) / len(ys)
+    # ========================================================
+    # HoverButton 顯示與隱藏
+    # ========================================================
+    def _show_floor_button(self, hit_right_edge:bool):
+        """
+        根據 self.floor，目前是 1、2 還是 3，決定畫哪些按鈕：
+          一樓 (1) → 只顯示「上樓」  
+          二樓 (2) → 顯示「上樓」、「下樓」  
+          三樓 (3) → 只顯示「下樓」
+        """
 
-            if abs(hx - px) < pw // 2 and abs(hy - py) < ph // 2:
-                # 3. 碰撞成功：刪圖、清參考、補血、計分
-                self.canvas.delete(heart.fill_id)
+        # 先把可能殘留的按鈕都刪掉
+        self._hide_floor_button()
 
-                # 如果這顆心是綁在某個 npc 上，清掉那個參考
-                for npc in self.npc_list:
-                    if getattr(npc, 'heart', None) is heart:
-                        npc.heart = None
-                # 如果你有用 self.hearts dict，也把它 pop 出來
-                self.hearts.pop(heart.fill_id, None)
+        x_center = WIDTH - 120 if hit_right_edge else 120
+        y_center = HEIGHT // 2
 
-                # 分數與補血
-                
-                self.health_bar.gain(heart.heal_amount)
-                score_add = 1500 if heart.heal_amount == BIG_HEART_HEAL else 500
-                self._update_score_display(add=score_add)
-                # print("eat"+ str(heart.heal_amount))
-    def _update_npcs(self):
-        # update NPC
-        for npc in self.npc_list:
-            if npc.id is None: 
-                continue
-            npc.update(self.bg_offset)
-            if not npc.is_attracted_noPK and not npc.is_attracted_PK:
-                npc.move(NPC_WALK_SPEED)
+        if self.floor == 1:
+            # 一樓：只有「上樓」按鈕
+            self.up_btn = HoverButton(
+                canvas=self.canvas,
+                x=x_center,
+                y=y_center,
+                img_normal_path=str(ASSETS_DIR / "up_button.png"),
+                img_hover_path =str(ASSETS_DIR / "up_button_hover.png"),
+                command=self._switch_up
+            )
+            self.down_btn = None
 
-        # update NPC_GIRL
-        for girl in self.npc_girl_list:
-            if girl.id is None: 
-                continue
-            girl.update(self.bg_offset)
-            if not girl.stopping and not girl.shock and not girl.in_pk_mode:
-                girl.move(NPC_WALK_SPEED) 
-            if girl.is_win or girl.is_lose:
-                #girl.move(NPC_WALK_SPEED) 
-                screen_x = girl.world_x - self.bg_offset
-                if screen_x < 0 or screen_x > WIDTH:
-                    # 從畫布刪除
-                    self.canvas.delete(girl.id_walk)
-                    self.canvas.delete(girl.id_exclamation)
-                    # 從列表移除
-                    self.npc_girl_list.remove(girl)
-                    # 取消所有 tag 或其他 callback（如有需要）
-                    # del girl  # 可選 
+        elif self.floor == 2:
+            # 二樓：上下樓各一個
+            self.up_btn = HoverButton(
+                canvas=self.canvas,
+                x=x_center,
+                y=y_center - 50,  # 比較靠上
+                img_normal_path=str(ASSETS_DIR / "up_button.png"),
+                img_hover_path =str(ASSETS_DIR / "up_button_hover.png"),
+                command=self._switch_up
+            )
+            self.down_btn = HoverButton(
+                canvas=self.canvas,
+                x=x_center,
+                y=y_center + 50,  # 比較靠下
+                img_normal_path=str(ASSETS_DIR / "down_button.png"),
+                img_hover_path =str(ASSETS_DIR / "down_button_hover.png"),
+                command=self._switch_down
+            )
 
-    
+        elif self.floor == 3:
+            # 三樓：只有「下樓」按鈕
+            self.up_btn = None
+            self.down_btn = HoverButton(
+                canvas=self.canvas,
+                x=x_center,
+                y=y_center,
+                img_normal_path=str(ASSETS_DIR / "down_button.png"),
+                img_hover_path =str(ASSETS_DIR / "down_button_hover.png"),
+                command=self._switch_down
+            )
+
+    def _hide_floor_button(self):
+        if hasattr(self, "up_btn") and self.up_btn:
+            self.up_btn.destroy()
+            self.up_btn = None
+        if hasattr(self, "down_btn") and self.down_btn:
+            self.down_btn.destroy()
+            self.down_btn = None
+      # --------------------- 上樓 / 下樓 的實作 ---------------------
+    def _switch_up(self):
+        """
+        把 is_switching_floor 設成 True → 顯示黑布 → 在後台（after_idle）真正載入上一層
+        """
+        if self.floor >= self.total_floors:
+            return  # 本來就是三樓，就不能再往上一樓
+        
+        self.is_switching_floor = True
+
+        # 1) 畫個黑矩形遮住整個畫布
+        self._overlay = self.canvas.create_rectangle(
+            0, 0, WIDTH, HEIGHT,
+            fill="black", outline=""
+        )
+        # 2) 等候 idle 時機再去做真正載入↓
+        self.after_idle(self._do_switch_up)
+
+    def _do_switch_up(self):
+        # a) 刪除現有場景
+        #self.canvas.delete("all")
+        self.canvas.delete("bg")
+        self.canvas.delete("npc")
+        self.canvas.delete("npc_girl")
+        self.canvas.delete("blackout")
+        self.canvas.delete("player")
+        # b) 把 floor + 1
+        
+        self.floor += 1
+        # c) 重新把 floor 內容 activate
+        self._activate_floor(self.floor)
+        # d) 把黑布刪掉
+        self.canvas.delete(self._overlay)
+        self._overlay = None
+        # e) 重新顯示對應層的「上下樓」按鈕
+        self.is_switching_floor = False
+
+
+    def _switch_down(self):
+        """
+        同理，把 is_switching_floor 設成 True → 畫黑布 → after_idle 載入下一層
+        """
+        if self.floor <= 1:
+            return  # 本來就是一樓，就不能再往下一樓
+        self.is_switching_floor = True
+
+        self._overlay = self.canvas.create_rectangle(
+            0, 0, WIDTH, HEIGHT,
+            fill="black", outline=""
+        )
+        self.after_idle(self._do_switch_down)
+
+    def _do_switch_down(self):
+        self.canvas.delete("bg")
+        self.canvas.delete("npc")
+        self.canvas.delete("npc_girl")
+        self.canvas.delete("blackout")
+        self.canvas.delete("player")
+        
+        self.floor -= 1
+        self._activate_floor(self.floor)
+        self.canvas.delete(self._overlay)
+        self._overlay = None
+        self.is_switching_floor = False
+
+   
     # --------------------------------------------------------
     # 每幀更新
     # --------------------------------------------------------
@@ -702,9 +767,9 @@ class ElectricEyeGame(tk.Tk):
                 min_x = PLAYER_RIGHT_X if self.player.face_right else PLAYER_LEFT_X
                 max_x = PLAYER_LEFT_X if self.player.face_right else PLAYER_RIGHT_X
                 if self.player.face_right:
-                    self.player.x = min(max(nx, min_x), max_x)
+                    self.player.x = min(max(nx, min_x), max_x-100)
                 else:
-                    self.player.x = max(min(nx, min_x), max_x)
+                    self.player.x = max(min(nx, min_x), max_x+100)
                 
 
         # ---------- 5. idle (玩家已無法再前進) 判斷 ----------
@@ -712,7 +777,7 @@ class ElectricEyeGame(tk.Tk):
         hit_right_edge = (
             self.player.face_right and
             self.bg_offset >= self.max_offset and
-            self.player.x >= PLAYER_LEFT_X and
+            self.player.x >= PLAYER_LEFT_X-100 and
             self.player.vx > 0                    # 還想往右
         )
 
@@ -720,12 +785,24 @@ class ElectricEyeGame(tk.Tk):
         hit_left_edge = (
             (not self.player.face_right) and
             self.bg_offset <= 0 and
-            self.player.x <= PLAYER_RIGHT_X and
+            self.player.x <= PLAYER_RIGHT_X+100 and
             self.player.vx < 0                    # 還想往左
         )
 
         self.player.idle = self.player.hover or hit_right_edge or hit_left_edge
-       
+        
+        if self.player.idle and (hit_left_edge or hit_right_edge):
+            # 如果一開始 up_btn/down_btn 都還沒定義，就呼叫顯示函式
+            if self.up_btn is None and self.down_btn is None:
+                self._show_floor_button(hit_right_edge)
+        else:
+            # 玩家離開邊界範圍 → 檢查哪個按鈕還存在，就先把它刪掉
+            if self.up_btn:
+                self.up_btn.destroy()
+                self.up_btn = None
+            if self.down_btn:
+                self.down_btn.destroy()
+                self.down_btn = None
         # ---------- 6. 更新影像、確認有沒有吃到愛心 ----------
         self._check_heart_collision()
         self.player.update()
@@ -735,8 +812,11 @@ class ElectricEyeGame(tk.Tk):
         
         layers = []
         # 玩家
-        px, py = self.canvas.coords(self.player.id)
-        layers.append((self.player.id, py))
+        coords = self.canvas.coords(self.player.id)
+        if len(coords) == 2:
+            px, py = coords
+            layers.append((self.player.id, py))
+
         # NPC 每個 layer 都要排序
         for npc in self.npc_list:
             if npc.id is None: # npc.py->start_dialog->remove_npc方法中有npc.i=None的操作
@@ -759,11 +839,154 @@ class ElectricEyeGame(tk.Tk):
                 except Exception:
                     continue
                 layers.append((cid, yy))
-
+            for dead_id in self.player.dead_npc_ids:
+                try:
+                    _, yy = self.canvas.coords(dead_id)
+                except Exception:
+                    continue
+                layers.append((dead_id, yy))
         # 按 y 升冪排序：y 小的先 raise，y 大的在最上
         layers.sort(key=lambda t: t[1])
         for cid, _ in layers:
             self.canvas.tag_raise(cid)
+
+    # --------------------------------------------------------
+    # 判定速度與是否要切換方向（觸發「切換背景」的過程）
+    # --------------------------------------------------------
+    def _determine_speed(self) -> int:
+        if self.player.set_direction(self.mouse_x):
+            tgt = PLAYER_RIGHT_X if self.player.face_right else PLAYER_LEFT_X
+            self.switching = True
+            self.switch_steps = 15
+            self.switch_dx_scr = (tgt - self.player.x) / 15
+            self.switch_world_x = self.bg_offset + self.player.x
+
+        dx = self.mouse_x - self.player.x
+        if abs(dx) < 8:
+            return 0
+        return RUN_SPEED if abs(dx) > WIDTH * 0.3 else WALK_SPEED
+
+    # --------------------------------------------------------
+    # 判斷有沒有吃到愛心
+    # --------------------------------------------------------
+    def _check_heart_collision(self):
+        px, py = self.player.x, self.player.y
+        pw = self.player.anim.frames[0].width()
+        ph = self.player.anim.frames[0].height()
+
+        # 收集要更新的 heart
+        hearts = []
+        # 1. 取出 npc_list 上綁的 hearts
+        for npc in self.npc_list:
+            if getattr(npc, 'heart', None):
+                hearts.append(npc.heart)
+
+        # 2. 再把 self.hearts dict 裡管理的 hearts 一起加進來
+        # 把 self.hearts 裡的也包成一樣格式
+        hearts.extend(self.hearts.values())
+
+        # 3. 統一做碰撞檢測
+        for heart in hearts:
+            if not (heart.fill_id and heart.fall_finished):
+                continue
+
+            coords = self.canvas.coords(heart.fill_id)
+            if not coords:
+                continue
+            xs, ys = coords[::2], coords[1::2]
+            hx = sum(xs) / len(xs)
+            hy = sum(ys) / len(ys)
+
+            if abs(hx - px) < pw // 2 and abs(hy - py) < ph // 2:
+                # 3. 碰撞成功：刪圖、清參考、補血、計分
+                self.canvas.delete(heart.fill_id)
+
+                # 如果這顆心是綁在某個 npc 上，清掉那個參考
+                for npc in self.npc_list:
+                    if getattr(npc, 'heart', None) is heart:
+                        npc.heart = None
+                # 如果你有用 self.hearts dict，也把它 pop 出來
+                self.hearts.pop(heart.fill_id, None)
+
+                # 分數與補血
+                
+                self.health_bar.gain(heart.heal_amount)
+                score_add = 1500 if heart.heal_amount == BIG_HEART_HEAL else 500
+                self._update_score_display(add=score_add)
+                # print("eat"+ str(heart.heal_amount))
+
+    # --------------------------------------------------------
+    # 更新所有 NPC 與 NPC_GIRL
+    # --------------------------------------------------------
+    def _update_npcs(self):
+        for npc in self.npc_list:
+            if npc.id is None:
+                continue
+            npc.update(self.bg_offset)
+            if not npc.is_attracted_noPK and not npc.is_attracted_PK:
+                npc.move(NPC_WALK_SPEED)
+
+        for girl in self.npc_girl_list:
+            if girl.id is None:
+                continue
+            girl.update(self.bg_offset)
+            if not girl.stopping and not girl.shock and not girl.in_pk_mode:
+                girl.move(NPC_WALK_SPEED)
+            if girl.is_win or girl.is_lose:
+                screen_x = girl.world_x - self.bg_offset
+                if (screen_x < 0 or screen_x > WIDTH) or girl.y<0:
+                    self.canvas.delete(girl.id_walk)
+                    self.canvas.delete(girl.id_exclamation)
+                    self.npc_girl_list.remove(girl)
+                    
+    # ========================================================
+    # 建立 UI (血條、暫停按鈕、時鐘、分數)
+    # ========================================================
+    def _setup_ui(self):
+        self.health_bar = HealthBar(self.ui_canvas, x=20, y=20, spacing=35, max_hearts=9, initial_full=4)
+
+        # 暫停按鈕
+        self.pause_btn = self.ui_canvas.create_oval(840, 5, 880, 45, fill="red", outline="white")
+        self.pause_text = self.ui_canvas.create_text(860, 25, text="||", fill="white", font=("Arial", 14, "bold"))
+        self.ui_canvas.tag_bind(self.pause_btn, "<Button-1>", self._toggle_pause)
+        self.ui_canvas.tag_bind(self.pause_text, "<Button-1>", self._toggle_pause)
+
+        # 時鐘
+        self.clock = Clock(self.clock_canvas, center_x=25, center_y=25, radius=20, total_seconds=self.game_time)
+
+        # 分數文字
+        self.score_text = self.ui_canvas.create_text(650, 25, text=f"Score: {self.score}", fill="white", font=("Arial", 24))
+
+    def _update_score_display(self, add=0):
+        self.score += add
+        self.ui_canvas.itemconfig(self.score_text, text=f"Score: {self.score}")
+
+    # 暫停
+    def _toggle_pause(self, event=None):
+        self.paused = not self.paused
+        if self.paused:
+            self.ui_canvas.config(height=HEIGHT, bg="white")
+            self._show_pause_menu()
+        else:
+            self._hide_pause_menu()
+            self.ui_canvas.config(height=50, bg="#007500")
+
+    def _show_pause_menu(self):
+        overlay = self.ui_canvas.create_rectangle(300, 100, 600, 300, fill="white", outline="black")
+        text_continue = self.ui_canvas.create_text(450, 160, text="繼續遊戲", font=("Arial", 14), fill="black")
+        text_back = self.ui_canvas.create_text(450, 220, text="返回主頁面", font=("Arial", 14), fill="black")
+        text_quit = self.ui_canvas.create_text(450, 280, text="結束遊戲", font=("Arial", 14), fill="black")
+
+        self.pause_menu_items = [overlay, text_continue, text_back, text_quit]
+        self.ui_canvas.tag_bind(text_continue, "<Button-1>", lambda e: self._toggle_pause())
+        self.ui_canvas.tag_bind(text_back, "<Button-1>", lambda e: self._return_to_main_menu())
+        self.ui_canvas.tag_bind(text_quit, "<Button-1>", lambda e: self.destroy())
+
+    def _hide_pause_menu(self):
+        for item in self.pause_menu_items:
+            self.ui_canvas.delete(item)
+        self.pause_menu_items.clear()
+
     def start_settlement(self):
         """
         啟動結算流程：讓 player 及其身後的 dead NPC 開始往右跑，
@@ -844,7 +1067,7 @@ class ElectricEyeGame(tk.Tk):
         # （一）1) 移動 player
         # --------------------------------------
         self.player.x += self.player.vx
-        self.player.update()  # 把 player.id 更新到 (self.player.x, self.player.y)
+        self.player.update(in_settlement=self.in_settlement)  # 把 player.id 更新到 (self.player.x, self.player.y)
 
         # --------------------------------------
         # （二）2) 移動死掉的 NPC 並檢查跳分/刪除
@@ -901,14 +1124,35 @@ class ElectricEyeGame(tk.Tk):
         else:
             # 還有 dead NPC 在畫面 → 下一幀繼續 settlement_update
             self.after(int(1000 / FPS), self.settlement_update)
+    # --------------------------------------------------------
+    # 返回主選單
+    # --------------------------------------------------------
     def _return_to_main_menu(self):
         self.destroy()
-        # 重新啟動 main_menu.py（需與game.py同資料夾）
         subprocess.Popen([sys.executable, "main_menu.py"])
-    
-    # --------------------------------------------------------
-    # 主迴圈
-    # --------------------------------------------------------
+    '''
+ # ========================================================
+    # 主迴圈 (定時呼叫 _update)
+    # ========================================================
+    def _loop(self):
+        if self.health_bar.is_empty():
+            self._return_to_main_menu()
+            return
+        
+        # 如果還在切換樓層，就 skip _update()，直到切換流程做完
+        if not self.is_switching_floor:
+            # 正常遊戲更新
+            if hasattr(self, 'clock'):
+                self.clock.update(paused=self.paused)
+            if not self.paused and not self.clock.finished:
+                self._update()
+            elif self.clock.finished:
+                self._return_to_main_menu()
+                return
+            
+        self.after(int(1000 / FPS), self._loop)
+    '''
+   
     def _loop(self):
         # 1. 如果血條歸零，或時間到，就進入結算
         if self.health_bar.is_empty():
@@ -918,26 +1162,24 @@ class ElectricEyeGame(tk.Tk):
                 self.settlement_update()   # 立刻呼叫 settlement_update
             # 既然已經啟動結算，就不再做其他一般邏輯
             return
+        if not self.is_switching_floor:
+            # 2. 時鐘更新（若有）
+            if hasattr(self, 'clock'):
+                self.clock.update(paused=self.paused)
 
-        # 2. 時鐘更新（若有）
-        if hasattr(self, 'clock'):
-            self.clock.update(paused=self.paused)
+            if not self.paused:
+                # 時間到 → 同理進入結算
+                if self.clock.finished:
+                    if not self.in_settlement:
+                        self.start_settlement()
+                        self.settlement_update()  # <- 立刻呼叫 settlement_update
+                    return
 
-        if not self.paused:
-            # 時間到 → 同理進入結算
-            if self.clock.finished:
-                if not self.in_settlement:
-                    self.start_settlement()
-                    self.settlement_update()  # <- 立刻呼叫 settlement_update
-                return
-
-            # 3. 一般遊戲更新（只有在沒有進入結算時）
-            self._update()
+                # 3. 一般遊戲更新（只有在沒有進入結算時）
+                self._update()
 
         # 4. 若不進入結算，就繼續下一個 _loop
         self.after(int(1000 / FPS), self._loop)
 
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     ElectricEyeGame().mainloop()
