@@ -1,6 +1,7 @@
 # game.py
 
 import tkinter as tk
+import tkinter.simpledialog as simpledialog
 from pathlib import Path
 from PIL import Image, ImageTk
 import random
@@ -1083,7 +1084,18 @@ class ElectricEyeGame(tk.Tk):
         self.player.x = 150
         self.player.update(in_settlement=True)
         self.player.anim = self.player.anim_right_walk
+        #死npc也要動
+        for idx, dead_id in enumerate(self.player.dead_npc_ids):
+            #向右
+            self.canvas.itemconfig(dead_id, image=self.player.dead_img_right)
 
+            offset_x = -70 * (idx + 1)
+            new_x = self.player.x + offset_x
+            new_y = self.player.y
+            try:
+                self.canvas.coords(dead_id, new_x, new_y)
+            except Exception:
+                pass
         # ----------------------------------------------------
         # (G) 重置計分結構 & 停用滑鼠互動
         # ----------------------------------------------------
@@ -1184,7 +1196,37 @@ class ElectricEyeGame(tk.Tk):
             self.after(int(1000 / FPS), self.settlement_update)
         else:
             # 玩家已離開、而且 dead NPC 全部刪除，停留 5 秒再回主選單
-            self.after(5000, self._return_to_main_menu)
+            # 跑完整個結算動畫後，立刻彈出輸入名字框，寫入檔案並顯示排行榜
+            self.after(1000, self._after_settlement)
+    def _after_settlement(self):
+        # 1. 先讓玩家輸入名字
+        name = simpledialog.askstring("遊戲結束", "請輸入你的名字：", parent=self)
+        if not name:
+            name = "no name"
+
+        # 2. 建立 RankingScreen，不要先呼叫 self.destroy()
+        screen = RankingScreen(self)
+
+        # 3. 把分數加進去並顯示
+        screen.ranking.append((name, self.score))
+        screen.ranking.sort(key=lambda x: x[1], reverse=True)
+        screen._save_ranking()
+
+        # 4. 顯示排行榜，並在排行榜關閉時再關掉主視窗
+        def on_close_rank():
+            # 當 RankingScreen 關閉後，才把主遊戲視窗關閉並回到主選單
+            try:
+                screen.destroy()
+            except:
+                pass
+            self.destroy()
+            # subprocess.Popen([sys.executable, "main_menu.py"])
+
+        # 把 on_close_rank 綁到 RankingScreen 的「關閉」事件
+        screen.protocol("WM_DELETE_WINDOW", on_close_rank)
+
+        # 最後顯示排行（不做動畫）
+        screen.show_treeview()
     # --------------------------------------------------------
     # 返回主選單
     # --------------------------------------------------------

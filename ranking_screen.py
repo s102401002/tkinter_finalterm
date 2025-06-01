@@ -48,7 +48,13 @@ class RankingScreen(tk.Toplevel):
         with path.open("w", encoding="utf-8") as f:
             for name, score in self.ranking:
                 f.write(f"{name},{score}\n")
-
+    def add_score(self, name: str, score: int):
+        # 1. 將新成績加入記憶體清單
+        self.ranking.append((name, score))
+        # 2. 依照分數從高到低排序（若分數相同，則按名字排序）
+        self.ranking.sort(key=lambda x: (-x[1], x[0]))
+        # 3. 寫檔到 ranking.txt
+        self._save_ranking()
     def _setup_style(self):
         style = ttk.Style(self)
         style.theme_use("clam")
@@ -180,6 +186,7 @@ class RankingScreen(tk.Toplevel):
         self.destroy()
         # 重新啟動 main_menu.py（需與game.py同資料夾）
         subprocess.Popen([sys.executable, "main_menu.py"])
+
     def add_score_and_animate(self, name: str, score: int, on_complete=None):
         # 加入新成績、重新排序並儲存
         self.ranking.append((name, score))
@@ -234,6 +241,7 @@ if __name__ == '__main__':
 
     def test_treeview():
         screen = RankingScreen(root)
+        # screen.add_score('p',9)
         screen.show_treeview()
 
     btn_frame = tk.Frame(root)
