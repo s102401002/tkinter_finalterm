@@ -32,15 +32,25 @@ class GameLauncher(tk.Tk):
     def open_settings(self):
         settings = tk.Toplevel(self)
         settings.title("遊戲設定")
-        settings.geometry("300x200")
+        settings.geometry("400x200")
         settings.configure(bg="#fefefe")
 
         tk.Label(settings, text="遊戲時間（秒）:", bg="#fefefe", font=("Arial", 10)).pack(pady=(10, 0))
         time_choices = [60, 90, 120, 150, 180]
-        time_combo = ttk.Combobox(settings, values=time_choices, textvariable=self.game_time, state="readonly", font=("Arial", 10), width=10)
-        time_combo.set(self.game_time.get())  # 預設顯示目前值
-        time_combo.pack()
-
+        # time_combo = ttk.Combobox(settings, values=time_choices, textvariable=self.game_time, state="readonly", font=("Arial", 10), width=10)
+        # time_combo.set(self.game_time.get())  # 預設顯示目前值
+        # time_combo.pack()
+        radio_frame = ttk.Frame(settings)
+        radio_frame.pack(padx=10, pady=5)
+        for t in time_choices:
+            rb = ttk.Radiobutton(
+                radio_frame,
+                text=f"{t} 秒",
+                value=t,
+                variable=self.game_time,
+                # 當選項改變時不需要額外動作，故不指定 command
+            )
+            rb.pack(side="left", padx=5, pady=2)
         tk.Label(settings, text="NPC 數量:", bg="#fefefe", font=("Arial", 10)).pack(pady=(10, 0))
         tk.Spinbox(settings, from_=1, to=20, textvariable=self.npc_count, font=("Arial", 10)).pack()
 
