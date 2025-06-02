@@ -8,7 +8,7 @@ from heart import HeartFillClip
 from character import Character
 FLASH_FPS = 16
 WEAK_FPS = 8
-DIED_FPS = 4
+DIED_FPS = 6
 HOVER_FPS = 12  # 每秒顯示懸停動畫的幀率
 FOCUS_FRAME_NUM = 3  # 懸停動畫的總幀數
 DIED_FRAME_NUM = 7
@@ -58,10 +58,7 @@ class NPC(Character):
         self.player = player
         #如果是被吸引死掉或是player贏了，就改成true並且刪掉它
         self.follow_player = False
-        #死掉的時候需要跟player通知
-        self.player = player
-        #如果是被吸引死掉或是player贏了，就改成true並且刪掉它
-        self.follow_player = False
+        
         # 載入圖片
         self.anim_walk_r = self._load_animation(asset_dir / 'man/right/walk', walk_fps, fps, 13,3)
         self.anim_walk_l = self._load_animation(asset_dir / 'man/left/walk', walk_fps, fps, 13,3)
@@ -195,10 +192,16 @@ class NPC(Character):
         return Animation(frames, walk_fps, fps)
     
     def move(self, speed: int):
-        if self.stopping or  self.is_attracted_noPK or self.is_attracted_PK or self.is_dead:
+        if self.stopping or  self.is_attracted_noPK or self.is_attracted_PK :
             return
         dx = speed if self.face_right else -speed
         nxt = self.world_x + dx
+        if self.is_dead:
+            if self.follow_player:
+                return
+            else:
+                self.world_x = nxt
+            return
         # 使用動態邊界
         if nxt <= self.bdr_left:
             self.world_x = self.bdr_left
@@ -217,11 +220,8 @@ class NPC(Character):
             self.heart.update(bg_offset)
         screen_x = self.world_x - bg_offset
         if self.is_dead:
-            if self.follow_player:
-                if self.id_died is not None:
-                   self.canvas.delete(self.id_died)
-                   self.id_died = None
-                return
+            if self.id_died is not None:
+                self.canvas.coords(self.id_died, screen_x, self.y)
             if not self.pose_final:
                 # 用 Animation._loop_counter 判斷
                 total = self.anim.loops_per_frame * self.anim.n   # 播完整套需要的 update 次數
@@ -230,21 +230,31 @@ class NPC(Character):
                     self.canvas.itemconfig(self.id_died,state='normal', image=self.current_img)
                 else:
                     self.pose_final = True
+                self.canvas.coords(self.id_died, screen_x, self.y)
+                return
             # 動畫播完之後，如果要跟玩家走，就把「留在原地的屍體」刪掉
             if self.follow_player:
                 if self.id_died is not None:
                    self.canvas.delete(self.id_died)
                    self.id_died = None
                 return
-
-            # 如果不追隨玩家，就繼續保持在原地顯示最後一張倒地圖
-            self.canvas.coords(self.id_died, screen_x, self.y)
-            # 動畫播完之後，如果要跟玩家走，就把「留在原地的屍體」刪掉
-            
-            
-            # 如果不追隨玩家，就繼續保持在原地顯示最後一張倒地圖
-            #self.canvas.coords(self.id_died, screen_x, self.y)
-            return
+            else:
+                # 倒地後跟npc_girl走出：播放最後兩張來回閃動
+                self.canvas.coords(self.id_died, screen_x, self.y)
+                frames = self.anim.frames
+                if len(frames) >= 2:
+                    last2 = frames[-2:]
+                    if not hasattr(self, "_blink_counter"):
+                        self._blink_counter = 0
+                        self._blink_index = 0
+                    self._blink_counter += 1
+                    if self._blink_counter >= 30:  # 每 30 幀切換一次
+                        self._blink_counter = 0
+                        self._blink_index = 1 - self._blink_index
+                        self.current_img = last2[self._blink_index]
+                        self.canvas.itemconfig(self.id_died, image=self.current_img)
+                    
+                return
         if self.is_attracted_PK:
             img_f = self.anim_attr_flash_mul.next()
             img_w = self.anim_attr_weak.next()
@@ -452,6 +462,7 @@ class NPC(Character):
             self.anim_attr_flash_mul._loop_counter = 0
             self.anim_attr_weak._loop_counter  = 0
             self.timer_seconds = 0
+            self.stopping = False
     def exit_pk_mode(self, player_win:bool):
         self.is_attracted_PK = False
         # 隱藏特效、顯示走路
@@ -467,6 +478,12 @@ class NPC(Character):
         self.canvas.itemconfig(self.id_died, state='normal', image=self.current_img)
         self.is_dead = True
         self.pose_final = False
+        if player_win:
+            self.follow_player = True
+        else:
+            self.follow_player = False 
+
+
 
 
     def _update_timer(self, root_window):
@@ -493,8 +510,8 @@ class NPC(Character):
         # 二、恢復 NPC 的各項屬性
         self.is_attracted_noPK = False
         self.is_attracted_PK = False
-        self.is_dead = False
-        self.follow_player = False
+        #self.is_dead = False
+        #self.follow_player = False
         self.stopping = False
         self.is_focused = False
         self.is_hovered = False

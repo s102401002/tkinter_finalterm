@@ -1207,7 +1207,12 @@ class ElectricEyeGame(tk.Tk):
         self.destroy()  # 關掉遊戲主視窗
 
         screen = RankingScreen()
-        screen.ranking.append((name, self.score))
+        screen.ranking.append((
+            name,
+            self.score,
+            self.game_time,   # 遊戲總時間 (秒)
+            self.npc_count    # NPC 數量
+        ))
         screen.ranking.sort(key=lambda x: x[1], reverse=True)
         screen._save_ranking()
         screen.show_treeview()

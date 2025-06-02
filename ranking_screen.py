@@ -3,13 +3,14 @@ from tkinter import ttk
 from pathlib import Path
 import subprocess
 import sys
+import math
 class RankingScreen(tk.Tk):
     RANK_FILE = "ranking.txt"
 
     def __init__(self, master=None):
         super().__init__(master)
         self.title("排行榜")
-        self.geometry("400x500")
+        self.geometry("700x500")
         self.resizable(False, False)
 
         # 1. 先把資料讀進來
@@ -31,26 +32,31 @@ class RankingScreen(tk.Tk):
                     if not line:
                         continue
                     parts = line.split(",")
-                    if len(parts) != 2:
+                    # 由於現在存四個欄位，所以長度要是 4
+                    if len(parts) != 4:
                         continue
-                    name, score_s = parts
+                    name, score_s, time_s, npc_s = parts
                     try:
                         score = int(score_s)
+                        game_time = int(time_s)
+                        npc_count = int(npc_s)
                     except ValueError:
                         continue
-                    data.append((name, score))
-        # 由分數高到低排序
+                    # 每筆改成 (name, score, game_time, npc_count)
+                    data.append((name, score, game_time, npc_count))
+        # 由分數高到低排序（如分數相同，再看名字排序）
         data.sort(key=lambda x: (-x[1], x[0]))
         return data
 
     def _save_ranking(self):
         path = Path(self.RANK_FILE)
         with path.open("w", encoding="utf-8") as f:
-            for name, score in self.ranking:
-                f.write(f"{name},{score}\n")
-    def add_score(self, name: str, score: int):
+            for name, score, game_time, npc_count in self.ranking:
+                # 寫檔時也要輸出四個欄位
+                f.write(f"{name},{score},{game_time},{npc_count}\n")
+    def add_score(self, name: str, score: int, game_time: int, npc_count: int):
         # 1. 將新成績加入記憶體清單
-        self.ranking.append((name, score))
+        self.ranking.append((name, score, game_time, npc_count))
         # 2. 依照分數從高到低排序（若分數相同，則按名字排序）
         self.ranking.sort(key=lambda x: (-x[1], x[0]))
         # 3. 寫檔到 ranking.txt
@@ -103,7 +109,7 @@ class RankingScreen(tk.Tk):
         # 這裡建立 self.tree，並設定欄位與排序功能
         self.tree = ttk.Treeview(
             self.tree_frame,
-            columns=("rank", "name", "score"),
+            columns=("rank", "name", "score", "time", "npc"),
             show="headings",
             style="Custom.Treeview",
         )
@@ -123,11 +129,11 @@ class RankingScreen(tk.Tk):
         self.tree_frame.rowconfigure(0, weight=1)
         self.tree_frame.columnconfigure(0, weight=1)
 
-        # 設定三個欄位的標題與排序 callback
+        # 設定五個欄位的標題與排序 callback
         self.tree.heading(
             "rank",
             text="排名",
-            command=lambda: self.treeview_sort_column(self.tree, "rank", False),# ttk.Treeview物件、排序的col、是否逆排序
+            command=lambda: self.treeview_sort_column(self.tree, "rank", False),
             anchor=tk.CENTER
         )
         self.tree.heading(
@@ -142,10 +148,25 @@ class RankingScreen(tk.Tk):
             command=lambda: self.treeview_sort_column(self.tree, "score", False),
             anchor=tk.CENTER
         )
+        self.tree.heading(
+            "time",
+            text="遊戲時間",
+            command=lambda: self.treeview_sort_column(self.tree, "time", False),
+            anchor=tk.CENTER
+        )
+        self.tree.heading(
+            "npc",
+            text="NPC數量",
+            command=lambda: self.treeview_sort_column(self.tree, "npc", False),
+            anchor=tk.CENTER
+        )
 
+        # 調整每個欄位寬度
         self.tree.column("rank", width=60, anchor=tk.CENTER)
-        self.tree.column("name", width=220, anchor=tk.W)
-        self.tree.column("score", width=100, anchor=tk.CENTER)
+        self.tree.column("name", width=160, anchor=tk.W)
+        self.tree.column("score", width=80, anchor=tk.CENTER)
+        self.tree.column("time", width=100, anchor=tk.CENTER)
+        self.tree.column("npc", width=80, anchor=tk.CENTER)
 
         # 交替底色（zebra stripe）
         self.tree.tag_configure("oddrow", background="#e0e0e0")
@@ -153,7 +174,8 @@ class RankingScreen(tk.Tk):
 
     def treeview_sort_column(self, tree, col, reverse):
         data_list = [(tree.set(k, col), k) for k in tree.get_children("")]
-        if col in ("rank", "score"):
+        if col in ("rank", "score", "time", "npc"):
+            # 這些欄位都是整數，先嘗試轉 int
             try:
                 data_list.sort(key=lambda t: int(t[0]), reverse=reverse)
             except ValueError:
@@ -174,10 +196,11 @@ class RankingScreen(tk.Tk):
         for iid in self.tree.get_children():
             self.tree.delete(iid)
 
-        # 把所有 ranking 資料插入
-        for idx, (n, s) in enumerate(self.ranking):
+        # 把所有 ranking 資料插入：每筆資料現在是 (name, score, game_time, npc_count)
+        for idx, (n, s, t, p) in enumerate(self.ranking):
             tag = "evenrow" if idx % 2 == 0 else "oddrow"
-            self.tree.insert("", "end", values=(idx + 1, n, s), tags=(tag,))
+            # 插入時多加兩格：遊戲時間 t、NPC數量 p
+            self.tree.insert("", "end", values=(idx + 1, n, s, t, p), tags=(tag,))
 
         # 最後一個「關閉」按鈕
         btn_close = ttk.Button(self, text="回到主選單", command=self._return_to_main_menu)
@@ -187,45 +210,80 @@ class RankingScreen(tk.Tk):
         # 重新啟動 main_menu.py（需與game.py同資料夾）
         subprocess.Popen([sys.executable, "main_menu.py"])
 
-    def add_score_and_animate(self, name: str, score: int, on_complete=None):
-        # 加入新成績、重新排序並儲存
-        self.ranking.append((name, score))
-        self.ranking.sort(key=lambda x: -x[1])
+    def add_score_and_animate(self, name: str, score: int, game_time: int, npc_count: int, on_complete=None):
+        # 儲存舊的排名，用於顯示舊排名
+        old_ranking = list(self.ranking)
+        # 先將新成績加入並排序（四個欄位）
+        self.ranking.append((name, score, game_time, npc_count))
+        self.ranking.sort(key=lambda x: (-x[1], x[0]))
         self._save_ranking()
 
-        # 把動畫先畫到 Canvas，動畫跑完再顯示 show_treeview()
-        self.canvas = tk.Canvas(self, width=400, height=500, bg="white")
+        # 找出新資料在新排名中的索引
+        new_index = next((i for i, (n, s, t, p) in enumerate(self.ranking) if n == name and s == score and t == game_time and p == npc_count), None)
+        if new_index is None:
+            new_index = len(self.ranking) - 1
+
+        # 建立 Canvas，先畫舊排名
+        self.canvas = tk.Canvas(self, width=500, height=600, bg="white")
         self.canvas.pack(fill=tk.BOTH, expand=True)
-        self.labels = []
-        for idx, (n, s) in enumerate(self.ranking[:10]):
-            y_start = 520 + idx * 40
-            txt = f"{idx + 1}. {n} - {s}"
-            lbl_id = self.canvas.create_text(
-                200, y_start,
-                text=txt,
-                font=("Arial", 16),
-                fill="black"
-            )
-            self.labels.append(lbl_id)
+        self.old_labels = []
+        for idx, (n, s, t, p) in enumerate(old_ranking[:10]):
+            y_pos = 50 + idx * 30
+            txt = f"{idx + 1}. {n} - {s} (T:{t}s, N:{p})"
+            lbl_id = self.canvas.create_text(250, y_pos, text=txt, font=("Arial", 14), fill="black")
+            self.old_labels.append(lbl_id)
 
-        def animate_step():
-            finished = True
-            for idx, lbl_id in enumerate(self.labels):
-                x, y = self.canvas.coords(lbl_id)
-                target_y = 50 + idx * 30
-                if y > target_y:
-                    self.canvas.move(lbl_id, 0, -5)
-                    finished = False
-            if not finished:
-                self.after(30, animate_step)
+        # 建立新資料的 Label，起始位置在畫面底部
+        new_y_start = 620
+        new_txt = f"{new_index + 1}. {name} - {score} (T:{game_time}s, N:{npc_count})"
+        self.new_label_id = self.canvas.create_text(250, new_y_start, text=new_txt, font=("Arial", 16), fill="red")
+
+        # 目標位置的 y 座標
+        target_y = 50 + new_index * 30
+
+        def animate_new_entry():
+            x, y = self.canvas.coords(self.new_label_id)
+            if y > target_y:
+                self.canvas.move(self.new_label_id, 0, -5)
+                self.after(30, animate_new_entry)
             else:
-                if on_complete:
-                    on_complete()
-                # 動畫結束之後把 Canvas 砍掉，改顯示 Treeview
-                self.canvas.destroy()
-                self.show_treeview()
+                # 到達位置後顯示煙火動畫
+                self.launch_firework(x, y)
+                # 短暫延遲後切換到 Treeview
+                self.after(800, finish_animation)
 
-        self.after(50, animate_step)
+        def finish_animation():
+            if on_complete:
+                on_complete()
+            self.canvas.destroy()
+            self.show_treeview()
+
+        # 開始動畫
+        self.after(50, animate_new_entry)
+
+    def launch_firework(self, x, y):
+        dots = []
+        # 建立 8 個方向的點
+        for angle in range(0, 360, 45):
+            rad = math.radians(angle)
+            dx = math.cos(rad)
+            dy = math.sin(rad)
+            dot_id = self.canvas.create_oval(x - 3, y - 3, x + 3, y + 3, fill="yellow", outline="")
+            dots.append((dot_id, dx, dy))
+
+        steps = 10
+
+        def animate_firework(step=0):
+            if step < steps:
+                for dot_id, dx, dy in dots:
+                    self.canvas.move(dot_id, dx * 5, dy * 5)
+                self.after(50, lambda: animate_firework(step + 1))
+            else:
+                # 刪除所有點
+                for dot_id, _, _ in dots:
+                    self.canvas.delete(dot_id)
+
+        animate_firework()
 
 def test():
     # 這裡的 root 只會顯示兩個按鈕，點按鈕時才建立 RankingScreen
@@ -254,6 +312,7 @@ def test():
 
     root.mainloop()
 if __name__ == '__main__':
+    # test()
     screen = RankingScreen()
     screen.show_treeview()
     screen.mainloop()
