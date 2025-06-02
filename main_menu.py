@@ -3,6 +3,7 @@ import tkinter.ttk as ttk
 import threading
 from game import ElectricEyeGame
 from ranking_screen import RankingScreen 
+import subprocess, sys
 class GameLauncher(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -45,8 +46,8 @@ class GameLauncher(tk.Tk):
 
         tk.Button(settings, text="確定", command=settings.destroy).pack(pady=15)
     def open_leaderboard(self):
-        # 從主選單開啟排行榜，直接顯示 Treeview
-        RankingScreen(self).show_treeview()
+        self.destroy()  # 關掉主選單，確保沒有 Tk 實例殘留
+        subprocess.Popen([sys.executable, "ranking_screen.py"])
 # -------------------------------
 # 載入動畫用的 Loading 視窗
 # -------------------------------

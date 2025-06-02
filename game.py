@@ -1204,29 +1204,14 @@ class ElectricEyeGame(tk.Tk):
         if not name:
             name = "no name"
 
-        # 2. 建立 RankingScreen，不要先呼叫 self.destroy()
-        screen = RankingScreen(self)
+        self.destroy()  # 關掉遊戲主視窗
 
-        # 3. 把分數加進去並顯示
+        screen = RankingScreen()
         screen.ranking.append((name, self.score))
         screen.ranking.sort(key=lambda x: x[1], reverse=True)
         screen._save_ranking()
-
-        # 4. 顯示排行榜，並在排行榜關閉時再關掉主視窗
-        def on_close_rank():
-            # 當 RankingScreen 關閉後，才把主遊戲視窗關閉並回到主選單
-            try:
-                screen.destroy()
-            except:
-                pass
-            self.destroy()
-            # subprocess.Popen([sys.executable, "main_menu.py"])
-
-        # 把 on_close_rank 綁到 RankingScreen 的「關閉」事件
-        screen.protocol("WM_DELETE_WINDOW", on_close_rank)
-
-        # 最後顯示排行（不做動畫）
         screen.show_treeview()
+        screen.mainloop()
     # --------------------------------------------------------
     # 返回主選單
     # --------------------------------------------------------

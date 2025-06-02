@@ -3,7 +3,7 @@ from tkinter import ttk
 from pathlib import Path
 import subprocess
 import sys
-class RankingScreen(tk.Toplevel):
+class RankingScreen(tk.Tk):
     RANK_FILE = "ranking.txt"
 
     def __init__(self, master=None):
@@ -148,7 +148,7 @@ class RankingScreen(tk.Toplevel):
         self.tree.column("score", width=100, anchor=tk.CENTER)
 
         # 交替底色（zebra stripe）
-        self.tree.tag_configure("oddrow", background="#f9f9f9")
+        self.tree.tag_configure("oddrow", background="#e0e0e0")
         self.tree.tag_configure("evenrow", background="#ffffff")
 
     def treeview_sort_column(self, tree, col, reverse):
@@ -227,8 +227,7 @@ class RankingScreen(tk.Toplevel):
 
         self.after(50, animate_step)
 
-
-if __name__ == '__main__':
+def test():
     # 這裡的 root 只會顯示兩個按鈕，點按鈕時才建立 RankingScreen
     root = tk.Tk()
     root.title("排行榜測試")
@@ -254,3 +253,8 @@ if __name__ == '__main__':
     btn_tree.pack(pady=5)
 
     root.mainloop()
+if __name__ == '__main__':
+    screen = RankingScreen()
+    screen.show_treeview()
+    screen.mainloop()
+    
