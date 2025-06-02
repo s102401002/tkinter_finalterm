@@ -259,7 +259,8 @@ class ElectricEyeGame(tk.Tk):
                                               y=y-120,
                                               anim_fps=10,
                                               fps=FPS,
-                                              on_finish=self._on_pk_finished)
+                                              on_finish=self._on_pk_finished,
+                                              num_girls=len(self.attack_npc_girl))
                 for girl in self.attack_npc_girl:
                     girl.enter_pk_mode(x, self.bg_offset)
                     girl_on_canvas_x, girl_on_canvas_y = self.canvas.coords(girl.id_walk)
@@ -302,7 +303,7 @@ class ElectricEyeGame(tk.Tk):
             self.dead_npc.follow_player = True
             self.attack_npc_girl.clear()
 
-            heal = BIG_HEART_HEAL # 治癒的血量
+            heal = BIG_HEART_HEAL+ 0.5*(len(self.attack_npc_girl)-1) # 治癒的血量
             heart = HeartFillClip.instant_create(
                 canvas         = self.canvas,
                 cx             = self.clicked_npc.world_x,
@@ -317,6 +318,7 @@ class ElectricEyeGame(tk.Tk):
 
         else:
             # 玩家輸
+            self.dead_npc.face_right = self.player.face_right
             self.dead_npc.exit_pk_mode(player_win=False)
             self.player.lose_pk_mode()
             for girl in self.attack_npc_girl:
@@ -335,7 +337,7 @@ class ElectricEyeGame(tk.Tk):
             return
         if self.pk_bar:
             self.pk_bar.on_click()
-            self.health_bar.lose_one_step(0.15)
+            self.health_bar.lose_one_step(0.01)
             #點一次加3分
             self._update_score_display(add=3)
 
@@ -926,6 +928,11 @@ class ElectricEyeGame(tk.Tk):
             npc.update(self.bg_offset)
             if not npc.is_attracted_noPK and not npc.is_attracted_PK:
                 npc.move(NPC_WALK_SPEED)
+            if npc.is_dead and not npc.follow_player:
+                screen_x = npc.world_x - self.bg_offset
+                if (screen_x < 0 or screen_x > WIDTH) :
+                    self.canvas.delete(npc.id_died)
+                    self.npc_list.remove(npc)
 
         for girl in self.npc_girl_list:
             if girl.id is None:

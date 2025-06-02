@@ -6,7 +6,6 @@ BAR_HEIGHT = 16
 BAR_X = 50
 BAR_Y = 30
 
-y_increment = 5          # 每點擊增加
 duration = 5_000         # 10 秒
 update_interval = 16      # 60FPS：每 16ms 更新一次
 
@@ -15,17 +14,25 @@ class LaserBarRectApp:
                  screen_x: int, 
                  y: int, 
                  anim_fps: int,fps: int, 
-                 on_finish: callable = None):
+                 on_finish: callable = None,
+                 num_girls: int = 1):
         
         self.canvas  = canvas
-        self.current_value = 50  # 初始長度為 50（最大值為 100）
-        self.max_value = 100
+        self.current_value = 100  # 初始長度為 50（最大值為 100）
+        self.max_value = 200
         self.running = True
         self.x0 = screen_x - int(BAR_WIDTH/2)
         self.x1 = screen_x + int(BAR_WIDTH/2)
         self.y0 = y - int(BAR_HEIGHT/2)
         self.y1 = y + int(BAR_HEIGHT/2)
         self.on_finish = on_finish  # 儲存 callback
+        
+        #依pk人數:難度線性增長
+        base_clicks = 15
+        extra_per_girl = 5
+        total_required_clicks = base_clicks + num_girls * extra_per_girl
+        self.y_increment = self.max_value / total_required_clicks 
+
         # 底色條（灰色背景）
         self.bar_bg = self.canvas.create_rectangle(
             self.x0-1, self.y0-1,
@@ -70,7 +77,7 @@ class LaserBarRectApp:
     def on_click(self):
         if not self.running:
             return
-        self.current_value = min(self.current_value + y_increment, self.max_value)
+        self.current_value = min(self.current_value + self.y_increment, self.max_value)
         if self.current_value >= self.max_value:
             self.current_value = self.max_value
             self.running = False

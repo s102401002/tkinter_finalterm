@@ -322,7 +322,8 @@ class Player:
         new_y = self.y
 
         # （3）重新在 Canvas 上 create_image，並更新 dead_npc_ids[idx]
-        new_id = self.canvas.create_image(new_x, new_y, image=img, anchor="center", tags="dead_npc")
+        new_id = self.canvas.create_image(new_x, new_y, image=img, state = "hidden",anchor="center", tags="dead_npc")
+        #先hidden,等原地倒地動畫播完再顯示
         self.dead_npc_ids[idx] = new_id
 
 
@@ -388,6 +389,9 @@ class Player:
                 new_x = self.x + offset_x
                 new_y = self.y
                 self.canvas.coords(canvas_id, new_x, new_y)
+                if npc.pose_final:
+                    self.canvas.itemconfig(canvas_id, state = "normal") 
+
 
     def set_stand_image(self, focus_npc=None, mouse_x: int=None):
         """滑鼠在 NPC 上時，用對應焦點圖顯示"""
