@@ -20,7 +20,3 @@ Victor,4949,60,7
 Judy,4701,60,7
 Olivia,4296,60,7
 77,2614,60,7
-no name,1625
-no name,0
-no name,0
-no name,0
