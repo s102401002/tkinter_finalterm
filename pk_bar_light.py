@@ -6,7 +6,7 @@ BAR_HEIGHT = 16
 BAR_X = 50
 BAR_Y = 30
 
-duration = 5_000         # 10 秒
+duration = 5_000         # 5 秒
 update_interval = 16      # 60FPS：每 16ms 更新一次
 
 class LaserBarRectApp:
@@ -32,7 +32,7 @@ class LaserBarRectApp:
         extra_per_girl = 5
         total_required_clicks = base_clicks + num_girls * extra_per_girl
         self.y_increment = self.max_value / total_required_clicks 
-
+        
         # 底色條（灰色背景）
         self.bar_bg = self.canvas.create_rectangle(
             self.x0-1, self.y0-1,

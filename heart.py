@@ -3,6 +3,7 @@ import math
 import time
 
 class HeartFillClip:
+    global_duration = 2.0
     def __init__(self, canvas, cx, screen_x, cy, scale, target_y = 280, on_fall_finish=None,heal_amount=1.0):
         self.canvas = canvas
         self.world_x = cx  # 記錄真實世界座標
@@ -18,7 +19,7 @@ class HeartFillClip:
         self.increment = 0.02
 
         self.start_time = time.time()
-        self.duration = 2.0  # sec，填滿所需時間
+        self.duration = HeartFillClip.global_duration    # sec，填滿所需時間
         self.fall_finished = False
         
         '''

@@ -20,6 +20,7 @@ from heart import HeartFillClip
 from laserBeam import LaserBeam
 from hover_button import HoverButton
 from ranking_screen import RankingScreen
+from coundown_pb import CountdownProgressBar
 # ------------------- config -------------------
 WIDTH, HEIGHT = 900, 400
 FPS = 60
@@ -82,6 +83,13 @@ class ElectricEyeGame(tk.Tk):
         self.down_btn = None
         self.is_switching_floor = True
         self.id_black_canvas = None
+
+        # 加入 invincible 模式旗標
+        self.invincible = False
+        # PK bar 預設 y_increment（以裡面實際類別設定為準，假設預設是 1）
+        self._pkbar_default_increment = None
+        self.countdown_bar = None
+
         # 存放遊戲狀態用變數
         self.bg_img = None
         self.bg_offset = 0
@@ -127,6 +135,7 @@ class ElectricEyeGame(tk.Tk):
         self._longpress = False
         self.in_pk_mode = False
         self.pk_bar = None
+
 
         # 綁定滑鼠事件
         self._bind_events()
@@ -202,7 +211,7 @@ class ElectricEyeGame(tk.Tk):
 
     def _on_press(self, event):
         #print("press")
-        if self.player.lose_pk:
+        if self.player.lose_pk or self.player.is_transforming :
             return
         if self.hover_npc and not self.in_pk_mode:
             self.clicked_npc = self.hover_npc
@@ -261,6 +270,8 @@ class ElectricEyeGame(tk.Tk):
                                               fps=FPS,
                                               on_finish=self._on_pk_finished,
                                               num_girls=len(self.attack_npc_girl))
+                if self.invincible:
+                    self.pk_bar.y_increment = 20
                 for girl in self.attack_npc_girl:
                     girl.enter_pk_mode(x, self.bg_offset)
                     girl_on_canvas_x, girl_on_canvas_y = self.canvas.coords(girl.id_walk)
@@ -280,7 +291,7 @@ class ElectricEyeGame(tk.Tk):
         else:
             # 沒有 NPC_GIRL，就進行單純對話
             self.dead_npc = None
-            self.clicked_npc.start_dialog(self)
+            self.clicked_npc.start_dialog(self, invicible = self.invincible)
             self.clicked_npc.update(self.bg_offset)
 
     def _on_pk_finished(self, success: bool):
@@ -301,9 +312,9 @@ class ElectricEyeGame(tk.Tk):
                 girl.exit_pk_mode(player_win=True, player_face_r=self.player.face_right)
             self.player.add_dead_npc(self.dead_npc)
             self.dead_npc.follow_player = True
-            self.attack_npc_girl.clear()
+            
 
-            heal = BIG_HEART_HEAL+ 0.5*(len(self.attack_npc_girl)-1) # 治癒的血量
+            heal = BIG_HEART_HEAL+ 0.5*(len(self.attack_npc_girl)) # 治癒的血量
             heart = HeartFillClip.instant_create(
                 canvas         = self.canvas,
                 cx             = self.clicked_npc.world_x,
@@ -316,6 +327,8 @@ class ElectricEyeGame(tk.Tk):
             )
             self.hearts[heart.fill_id] = heart
 
+            self.attack_npc_girl.clear()
+
         else:
             # 玩家輸
             self.dead_npc.face_right = self.player.face_right
@@ -323,21 +336,22 @@ class ElectricEyeGame(tk.Tk):
             self.player.lose_pk_mode()
             for girl in self.attack_npc_girl:
                 girl.exit_pk_mode(player_win=False, player_face_r=self.player.face_right)
-            self.health_bar.lose_one_step()
+            if not self.invincible:
+                self.health_bar.lose_one_step()
 
         self.player.attracting = False
         self.in_pk_mode = False
         self.dead_npc = None
         self.attack_npc_girl.clear()
-        self.health_bar.lose_one_step()
 
     def _on_release(self, event):
         #print("release")
-        if self.player.lose_pk:
+        if self.player.lose_pk or self.player.is_transforming :
             return
         if self.pk_bar:
             self.pk_bar.on_click()
-            self.health_bar.lose_one_step(0.01)
+            if not self.invincible:
+                self.health_bar.lose_one_step(0.05)
             #點一次加3分
             self._update_score_display(add=3)
 
@@ -682,7 +696,7 @@ class ElectricEyeGame(tk.Tk):
         # =====================================================
         # 1-1.玩家跌倒中(無視所有滑鼠事件)
         # =====================================================
-        if self.player.lose_pk:
+        if self.player.lose_pk or self.player.is_transforming :
             self._update_npcs() 
             self.player.update()
             return
@@ -912,9 +926,9 @@ class ElectricEyeGame(tk.Tk):
                 self.hearts.pop(heart.fill_id, None)
 
                 # 分數與補血
-                
-                self.health_bar.gain(heart.heal_amount)
-                score_add = 1500 if heart.heal_amount == BIG_HEART_HEAL else 500
+                if not self.invincible:
+                    self.health_bar.gain(heart.heal_amount)
+                score_add = 1000*heart.heal_amount if heart.heal_amount == BIG_HEART_HEAL else 500
                 self._update_score_display(add=score_add)
                 # print("eat"+ str(heart.heal_amount))
 
@@ -946,7 +960,95 @@ class ElectricEyeGame(tk.Tk):
                     self.canvas.delete(girl.id_walk)
                     self.canvas.delete(girl.id_exclamation)
                     self.npc_girl_list.remove(girl)
-                    
+
+    def start_invincibility(self):
+        """
+        啟動 10 秒無敵模式：
+        1. invincible = True
+        2. healthbar 前 5 顆心填滿，其他歸零
+        3. HeartFillClip.global_duration = 1.0
+        4.  pk_bar原本 y_incremen改成 20
+        5. 10 秒後自動呼叫 end_invincibility()
+        """
+        print("進入無敵")
+        if self.invincible:
+            return  # 已經在無敵中，就不要重複啟動
+
+        self.invincible = True
+
+        # (1) 血條前 5 顆心填滿，其他 0
+        self.health_bar.set_full_n_hearts(5)
+
+        # (2) 心的填滿速度改為 1.0 秒
+        HeartFillClip.global_duration = 1.0
+
+        # (3) 如果此刻已經有一個 pk_bar 在畫面上，記錄它的預設 y_increment
+        if hasattr(self, 'pk_bar') and self.pk_bar:
+            # 第一筆建立時，把預設值存起來
+            if self._pkbar_default_increment is None:
+                self._pkbar_default_increment = getattr(self.pk_bar, 'y_increment', None)
+            # 再把它改成 20
+            self.pk_bar.y_increment = 20
+          # 3. 建立倒數進度條（覆蓋區域大小根據 UI 設定調整）
+        #    這裡範例假設左上要覆蓋的寬度為 20 + 5*35 (=195)，高度為 50
+        last_cx       = self.health_bar.x + (self.health_bar.max_hearts - 1) * self.health_bar.spacing
+        overlay_w     = last_cx + self.health_bar.spacing // 2 + 10     # ← 完整遮罩寬度
+        overlay_h = 50
+        #    倒數長條寬度同 overlay_w - 40、高度 10，位置從 (20,20) 開始
+        bar_x0 = 20
+        bar_y0 = 20
+        bar_w = overlay_w - 40
+        bar_h = 10
+        duration = 15.0  # 10 秒倒數
+
+        # 4. 建立 CountdownProgressBar；結束時呼叫 self.end_invincibility()
+        self.countdown_bar = CountdownProgressBar(
+            canvas=self.ui_canvas,
+            x0=bar_x0,
+            y0=bar_y0,
+            width=bar_w,
+            height=bar_h,
+            duration=duration,
+            overlay_w=overlay_w,
+            overlay_h=overlay_h,
+            on_finish=self.end_invincibility
+        )
+        self._update_score_display(add=5000)
+        # (4) 安排 10 秒後自動結束無敵
+        self.after(10000, self.end_invincibility)
+
+    def end_invincibility(self):
+        """
+        無敵結束：
+        1. invincible = False
+        2. 將 HeartFillClip.global_duration 恢復成 2.0
+        3. 如果之前有記錄過 pk_bar 的預設 y_increment，就還原
+        """
+        print("結束無敵")
+        if not self.invincible:
+            return
+
+        self.invincible = False
+
+        # (1) 心的填滿速度恢復成 2.0 秒
+        HeartFillClip.global_duration = 2.0
+
+        # (2) 如果之前記錄過 pk_bar 的 y_increment，就把它還原
+        if hasattr(self, '_pkbar_default_increment') and self._pkbar_default_increment is not None:
+            # 若目前仍存在一個 pk_bar，就還原它
+            if hasattr(self, 'pk_bar') and self.pk_bar:
+                self.pk_bar.y_increment = self._pkbar_default_increment
+            # 清掉暫存值
+            self._pkbar_default_increment = None
+         # 2. 刪除（或確保刪除）倒數進度條
+        if self.countdown_bar:
+            # 這裡 CountdownProgressBar.end() 內部會自動呼叫 callback
+            # 但若還沒結束，也可直接 destroy()
+            self.countdown_bar.destroy()
+            self.countdown_bar = None
+
+        # 3. 還原原本 health_bar 的顯示 (呼叫 _draw_initial() 重新繪製)
+        self.health_bar._draw_initial()              
     # ========================================================
     # 建立 UI (血條、暫停按鈕、時鐘、分數)
     # ========================================================
@@ -1229,29 +1331,7 @@ class ElectricEyeGame(tk.Tk):
     # --------------------------------------------------------
     def _return_to_main_menu(self):
         self.destroy()
-        subprocess.Popen([sys.executable, "main_menu.py"])
-    '''
- # ========================================================
-    # 主迴圈 (定時呼叫 _update)
-    # ========================================================
-    def _loop(self):
-        if self.health_bar.is_empty():
-            self._return_to_main_menu()
-            return
-        
-        # 如果還在切換樓層，就 skip _update()，直到切換流程做完
-        if not self.is_switching_floor:
-            # 正常遊戲更新
-            if hasattr(self, 'clock'):
-                self.clock.update(paused=self.paused)
-            if not self.paused and not self.clock.finished:
-                self._update()
-            elif self.clock.finished:
-                self._return_to_main_menu()
-                return
-            
-        self.after(int(1000 / FPS), self._loop)
-    '''
+        subprocess.Popen([sys.executable, "main_menu.py"]) 
    
     def _loop(self):
         # 1. 如果血條歸零，或時間到，就進入結算
@@ -1262,21 +1342,30 @@ class ElectricEyeGame(tk.Tk):
                 self.settlement_update()   # 立刻呼叫 settlement_update
             # 既然已經啟動結算，就不再做其他一般邏輯
             return
-        if not self.is_switching_floor:
-            # 2. 時鐘更新（若有）
-            if hasattr(self, 'clock'):
-                self.clock.update(paused=self.paused)
+        if self.health_bar.is_full():
+            if not self.player.is_transforming and not self.player.transforming_pose_final :
+                self.player.enter_transforming_mode()
+        
+        if self.player.transforming_pose_final and (not self.invincible):
+            # 進入無敵前，先把這個旗標 reset，避免重複觸發
+            self.player.transforming_pose_final = False  
+            self.start_invincibility()
 
-            if not self.paused:
-                # 時間到 → 同理進入結算
-                if self.clock.finished:
-                    if not self.in_settlement:
-                        self.start_settlement()
-                        self.settlement_update()  # <- 立刻呼叫 settlement_update
-                    return
+            
+        # 2. 時鐘更新（若有）
+        if hasattr(self, 'clock'):
+            self.clock.update(paused=(self.paused or self.player.is_transforming or self.is_switching_floor))
 
-                # 3. 一般遊戲更新（只有在沒有進入結算時）
-                self._update()
+        if not self.paused:
+            # 時間到 → 同理進入結算
+            if self.clock.finished:
+                if not self.in_settlement:
+                    self.start_settlement()
+                    self.settlement_update()  # <- 立刻呼叫 settlement_update
+                return
+
+            # 3. 一般遊戲更新（只有在沒有進入結算時）
+            self._update()
 
         # 4. 若不進入結算，就繼續下一個 _loop
         self.after(int(1000 / FPS), self._loop)

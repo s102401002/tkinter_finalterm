@@ -335,7 +335,7 @@ class NPC(Character):
             self.bdr_right = self.world_x + int(self.cur_range/2) if self.face_right else self.world_x
             self._end_hits = 0
 
-    def start_dialog(self, root_window):
+    def start_dialog(self, root_window, invicible:bool):
         if not self.is_attracted_noPK:
             self.is_attracted_noPK = True
             # 隱藏走路、顯示特效
@@ -375,7 +375,8 @@ class NPC(Character):
             )
             self._root = root_window
             def _drain():
-                root_window.health_bar.lose_one_step(0.05)
+                if not invicible:
+                    root_window.health_bar.lose_one_step(0.05)
                 # 每500ms加1分
                 root_window._update_score_display(add=1)
                 # 500 ms 後再扣
@@ -384,11 +385,6 @@ class NPC(Character):
             # 立即執行第一次
             _drain()
             
-            #self.canvas.addtag_withtag(self._tag, self.heart.fill_id)
-            # if not self.timer_label:
-            #     self.timer_label = tk.Label(root_window, text="", font=("Arial", 14), fg="white", bg="black")
-            #     self.timer_label.place(x=10, y=10)
-            # self._update_timer(root_window)
 
     def stop_dialog(self):
         self.is_attracted_noPK = False

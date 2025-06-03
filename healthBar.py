@@ -15,7 +15,7 @@ class Heart:
 
         self.outline_points = self.compute_heart_points()
         self.outline_id = self.canvas.create_polygon(
-            self.outline_points, outline="black", fill="", width=2, tags="health_ui"
+            self.outline_points, outline="#FF99FF", fill="", width=2, tags="health_ui"
         )
         self.fill_id = None
         self.fill_ratio = 0.0
@@ -38,7 +38,7 @@ class Heart:
         threshold_y = max_y - (max_y - min_y) * self.fill_ratio
         clipped = [(x, y) for (x, y) in self.outline_points if y > threshold_y]
         if len(clipped) >= 3:
-            self.fill_id = self.canvas.create_polygon(clipped, fill="red", outline="", tags="health_ui")
+            self.fill_id = self.canvas.create_polygon(clipped, fill="#FFE9FE", outline="", tags="health_ui")
 
     def animate_reverse_step(self, reduce_by=None):
         if reduce_by == None:
@@ -77,6 +77,15 @@ class HealthBar:
     def is_empty(self):
         """如果所有愛心都已扣光，回傳 True"""
         return all(h.fill_ratio <= 0 for h in self.hearts)
+    def is_full(self) -> bool:
+        """
+        如果所有 Heart 的 fill_ratio 都已經 >= 1.03，則判斷為滿血。
+        """
+        # 1.03 是在 Heart 畫滿的時候所設定的 threshold
+        for h in self.hearts:
+            if h.fill_ratio < 1.03:
+                return False
+        return True
     def _draw_initial(self):
         for i in range(self.initial_full):
             self.hearts[i].fill_ratio = 1.03
@@ -106,6 +115,19 @@ class HealthBar:
                     heart.fill_ratio += increase
                     increase = 0
                 heart.draw()
+    
+    def set_full_n_hearts(self, n: int):
+        """
+        把最左邊前 n 顆 heart 直接設為滿 (fill_ratio=1.03)，
+        並把其他所有 heart 清空 (fill_ratio=0)。
+        再呼叫 draw() 重畫所有。
+        """
+        for idx, heart in enumerate(self.hearts):
+            if idx < n:
+                heart.fill_ratio = 1.03
+            else:
+                heart.fill_ratio = 0.0
+            heart.draw()
 
 if __name__ == "__main__":
     root = tk.Tk()
