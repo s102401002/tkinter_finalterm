@@ -230,7 +230,6 @@ class NPC(Character):
                     self.canvas.itemconfig(self.id_died,state='normal', image=self.current_img)
                 else:
                     self.pose_final = True
-                self.canvas.coords(self.id_died, screen_x, self.y)
                 return
             # 動畫播完之後，如果要跟玩家走，就把「留在原地的屍體」刪掉
             if self.follow_player:

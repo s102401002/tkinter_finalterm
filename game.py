@@ -479,7 +479,47 @@ class ElectricEyeGame(tk.Tk):
         new_floor = self.floor
         old_floor = getattr(self, 'prev_floor', None)
 
+         # =========================
+        # 如果是切換樓層，要把舊樓層所有的「愛心」都清除
+        # =========================
+        if old_floor is not None:
+            # <<< 愛心清除開始 >>>
+            # 1. 先把 self.hearts 中所有 HeartFillClip 停掉並移除畫布
+            for heart_id, heart_obj in list(self.hearts.items()):
+                try:
+                    # 如果還在填滿階段，呼叫 stop() 會把 outline 也刪掉
+                    heart_obj.stop()
+                except:
+                    pass
+                # 無論 fill_id 是否存在，都嘗試刪除
+                try:
+                    self.canvas.delete(heart_obj.fill_id)
+                except:
+                    pass
+                try:
+                    self.canvas.delete(heart_obj.outline_id)
+                except:
+                    pass
+                # 從 self.hearts 字典裡移除
+                self.hearts.pop(heart_id, None)
 
+            # 2. 把每個 NPC 物件（在舊樓層還存活的）身上的 .heart 也歸空
+            for npc in self.floor_data[old_floor]['npc_list']:
+                if getattr(npc, 'heart', None):
+                    try:
+                        npc.heart.stop()
+                    except:
+                        pass
+                    # 同樣把它的畫布 shape 刪除
+                    try:
+                        self.canvas.delete(npc.heart.fill_id)
+                    except:
+                        pass
+                    try:
+                        self.canvas.delete(npc.heart.outline_id)
+                    except:
+                        pass
+                    npc.heart = None
          # 1. Hide（或刪除）舊樓層的 NPC/Girl 圖片
         if old_floor is not None:
             # 只針對 NPC、NPC_GIRL tag 做刪除
