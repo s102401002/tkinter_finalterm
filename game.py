@@ -1115,7 +1115,7 @@ class ElectricEyeGame(tk.Tk):
     def _toggle_pause(self, event=None):
         self.paused = not self.paused
         if self.paused:
-            self.ui_canvas.config(height=HEIGHT, bg="white")
+            self.ui_canvas.config(height=HEIGHT+50, bg="white")
             self._show_pause_menu()
         else:
             self._hide_pause_menu()
