@@ -92,7 +92,7 @@ class HeartFillClip:
 
         # 更新比例
         self.fill_ratio += self.increment
-        if self.fill_ratio <= 1.03: # 用1.0會缺一塊 可能是浮點數精度問題?
+        if self.fill_ratio <= 1.0: # 用1.0會缺一塊 可能是浮點數精度問題?
             self.canvas.after(self.delay, self.animate_fill)
         else:
             if self.on_fall_finish:
@@ -104,7 +104,7 @@ class HeartFillClip:
     def stop(self):
         self.stopped = True
         # 不刪除已填滿的 fill_id
-        if self.fill_ratio < 1.03:
+        if self.fill_ratio < 1.0:
             if self.fill_id:
                 self.canvas.delete(self.fill_id)
         if self.outline_id:

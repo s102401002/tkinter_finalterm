@@ -45,7 +45,7 @@ NORMAL_HEART_HEAL = 1.0
 BIG_HEART_HEAL = 1.5
 # ------------------- main game -------------------
 class ElectricEyeGame(tk.Tk):
-    def __init__(self, game_time=60, npc_count=7): 
+    def __init__(self, game_time=600, npc_count=7): 
         super().__init__()
 
         # --- 基本視窗與 Canvas 設定 ---
@@ -210,7 +210,7 @@ class ElectricEyeGame(tk.Tk):
                 self._on_release(e)
 
     def _on_press(self, event):
-        #print("press")
+        print("按下滑鼠")
         if self.player.lose_pk or self.player.is_transforming :
             return
         if self.hover_npc and not self.in_pk_mode:
@@ -345,13 +345,13 @@ class ElectricEyeGame(tk.Tk):
         self.attack_npc_girl.clear()
 
     def _on_release(self, event):
-        #print("release")
+        print("放開滑鼠")
         if self.player.lose_pk or self.player.is_transforming :
             return
         if self.pk_bar:
             self.pk_bar.on_click()
             if not self.invincible:
-                self.health_bar.lose_one_step(0.05)
+                self.health_bar.lose_one_step(0.075)
             #點一次加3分
             self._update_score_display(add=3)
 
@@ -394,7 +394,7 @@ class ElectricEyeGame(tk.Tk):
 
             # 用一個「暫時 Canvas」來建構 NPC 與 NPC_GIRL（不顯示）
             temp_canvas = tk.Canvas(self, width=WIDTH, height=HEIGHT)
-            npc_list, girl_list = self._generate_npcs(temp_canvas, nw)
+            npc_list, girl_list = self._generate_npcs(temp_canvas, nw,fl)
 
             # 儲存進 floor_data
             self.floor_data[fl] = {
@@ -407,7 +407,7 @@ class ElectricEyeGame(tk.Tk):
     # --------------------------------------------------------
     # 生成單層的 NPC / NPC_GIRL 列表
     # --------------------------------------------------------
-    def _generate_npcs(self, canvas, bg_width):
+    def _generate_npcs(self, canvas, bg_width, floor):
         npc_list = []
         girl_list = []
         npc_asset_dir = ASSETS_DIR / 'npc'
@@ -434,7 +434,7 @@ class ElectricEyeGame(tk.Tk):
             npc_list.append(npc)
 
         # 建立 NPC_GIRL
-        for i in range(4):
+        for i in range(floor*3):
             y = random.choice(y_choices)
             girl = NPC_GIRL(
                 canvas,
@@ -465,11 +465,11 @@ class ElectricEyeGame(tk.Tk):
             self.canvas.after_idle(
                 lambda: self._show_floor_content(self.floor_data[floor])
             )
-            self.canvas.tag_raise(self.player.id)
+           
         else:
             # use_blackout=False 時就不用畫黑幕
             self._show_floor_content(self.floor_data[floor])
-            self.canvas.tag_raise(self.player.id)
+    
 
     def _show_floor_content(self, data):
         # 如果之前真的有 overlay，也一定要先把它刪掉
@@ -733,6 +733,17 @@ class ElectricEyeGame(tk.Tk):
         for h in hearts:
             if h.fall_finished or h.if_startfall:
                 h.update(self.bg_offset)
+        
+        #手動解除自己走離focus範圍內的npc
+        if self.focus_npc:
+          coords = self.canvas.coords(self.focus_npc.id)
+          if coords:
+              x1, y1 = coords
+              w = self.focus_npc.current_img.width()
+              h = self.focus_npc.current_img.height()
+              if not (abs(self.mouse_x - x1) <= w // 2 and abs(self.mouse_y - y1) <= h // 2):
+                  self.focus_npc._on_hover_leave()
+                  self.focus_npc = None
         # =====================================================
         # 1-1.玩家跌倒中(無視所有滑鼠事件)
         # =====================================================

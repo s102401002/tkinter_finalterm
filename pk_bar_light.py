@@ -29,7 +29,7 @@ class LaserBarRectApp:
         
         #依pk人數:難度線性增長
         base_clicks = 15
-        extra_per_girl = 5
+        extra_per_girl = 10
         total_required_clicks = base_clicks + num_girls * extra_per_girl
         self.y_increment = self.max_value / total_required_clicks 
         
@@ -103,6 +103,29 @@ class LaserBarRectApp:
                 self.canvas.delete(cid)
 if __name__ == "__main__":
     root = tk.Tk()
-    root.title("攻擊條（Rectangle 節能版）")
-    app = LaserBarRectApp(root)
+    root.title("PK Bar 獨立測試")
+    root.geometry("300x100")
+
+    canvas = tk.Canvas(root, width=300, height=100, bg="white")
+    canvas.pack(fill="both", expand=True)
+
+    # 把 PK Bar 放在畫布中間 (150,50)
+    app = LaserBarRectApp(
+        canvas    = canvas,
+        screen_x  = 150,
+        y         = 50,
+        anim_fps  = 10,
+        fps       = 60,
+        on_finish = lambda success: print("PK 結果:", "贏" if success else "輸"),
+        num_girls = 1
+    )
+    
+    # 4. 在 Canvas 下面加一個 Button，按下去就呼叫 app.on_click()
+    btn = tk.Button(
+        root,
+        text="按我加分（觸發 on_click）",
+        command=app.on_click
+    )
+    btn.pack(side="top", pady=10)
+
     root.mainloop()

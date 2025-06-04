@@ -355,7 +355,8 @@ class NPC(Character):
                 self.canvas.delete(self.id_weak)
                 self.id = None # 把NPC的id拿掉，不再更新
             '''
-          
+            if self.id_walk is None:
+                return
             # 加入愛心圖形 (顯示在 NPC 上方)
             screen_x = self.canvas.coords(self.id_walk)[0]
             heart_cx = self.world_x
@@ -374,12 +375,13 @@ class NPC(Character):
             )
             self._root = root_window
             def _drain():
-                if not invicible:
-                    root_window.health_bar.lose_one_step(0.05)
-                # 每500ms加1分
-                root_window._update_score_display(add=1)
-                # 500 ms 後再扣
-                self._drain_id = root_window.after(500, _drain)
+                if self.is_attracted_noPK:
+                    if not invicible:
+                        root_window.health_bar.lose_one_step(0.125)
+                    # 每500ms加1分
+                    root_window._update_score_display(add=1)
+                    # 500 ms 後再扣
+                    self._drain_id = root_window.after(500, _drain)
 
             # 立即執行第一次
             _drain()

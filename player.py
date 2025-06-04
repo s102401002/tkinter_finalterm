@@ -4,7 +4,7 @@ from animation import Animation
 from npc import NPC
 
 # 播放跌倒動畫時的目標 FPS 和總幀數
-FALL_DOWN_FPS = 12
+FALL_DOWN_FPS = 8
 FALL_DOWN_FRAME_NUM = 18
 REINFORCE_FPS = 16
 REINFORCE_FRAME_NUM = 32
